@@ -2,7 +2,7 @@ import { UNITS, toBase, baseOf, toMaterialBase } from './units.js';
 
 export const DEFAULT_SETTINGS = {
   id: 1,
-  shop_name: 'مانس كوفي',
+  shop_name: 'مأنس',
   menu_note: '',
   vat_rate: 15,
   vat_registered: false,

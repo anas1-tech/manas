@@ -1,11 +1,11 @@
 -- ═══════════════════════════════════════════════
--- مانس كوفي: حاسبة التكاليف
+-- مأنس: حاسبة التكاليف
 -- انسخ هذا الملف كامل والصقه في Supabase ← SQL Editor ← Run
 -- ═══════════════════════════════════════════════
 
 create table if not exists public.settings (
   id int primary key default 1 check (id = 1),
-  shop_name text not null default 'مانس كوفي',
+  shop_name text not null default 'مأنس',
   menu_note text default '',
   vat_rate numeric not null default 15,
   vat_registered boolean not null default false,

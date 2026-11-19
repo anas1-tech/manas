@@ -19,7 +19,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="panel" onSubmit={submit}>
-        <div className="brand"><Logo /><div><b>مانس كوفي</b><span>حاسبة التكاليف</span></div></div>
+        <div className="brand"><Logo /><div><b>مأنس</b><span>حاسبة التكاليف</span></div></div>
         <Field label="اسم المستخدم أو الإيميل"><input className="input" type="text" dir="ltr" autoComplete="username" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
         <Field label="كلمة المرور"><input className="input" type="password" dir="ltr" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
         {err && <p style={{ color: 'var(--bad)', margin: 0 }} role="alert">{err}</p>}
