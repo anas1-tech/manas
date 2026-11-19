@@ -3,7 +3,8 @@ import { LayoutDashboard, CupSoda, Package, Calculator as CalcIcon, Settings as 
 import UPDATE_SQL from '../supabase/updates/003_features.sql?raw';
 import { StoreProvider, useStore, useAuth } from './lib/store.jsx';
 import { isRemote, schemaOutdated, supabase } from './lib/db.js';
-import { Link, Logo, Toasts, usePath } from './components/ui.jsx';
+import { Link, Toasts, usePath } from './components/ui.jsx';
+import Wordmark from './components/Wordmark.jsx';
 import { useTheme } from './pages/Settings.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Materials from './pages/Materials.jsx';
@@ -61,7 +62,7 @@ function Shell({ path }) {
   return (
     <div className="app">
       <aside className="side">
-        <div className="brand"><Logo /><div><b>{settings.shop_name}</b><span>حاسبة التكاليف</span></div></div>
+        <Link to="/" className="brand"><Wordmark title={settings.shop_name} /><span>حاسبة التكاليف</span></Link>
         {allowed.map(link)}
         <div className="side-foot">
           <Link to="/menu" className="nav-link" target="_blank"><Tv aria-hidden="true" />شاشة المنيو</Link>

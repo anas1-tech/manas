@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Printer, Download, ArrowRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { href, navigate, Logo, Seg } from '../components/ui.jsx';
+import { href, navigate, Seg } from '../components/ui.jsx';
+import Wordmark from '../components/Wordmark.jsx';
+import { BRAND_EN } from '../lib/brand.js';
 
 /** بطاقة QR للمنيو: تنطبع وتنحط على الطاولات أو الواجهة */
 export default function QR() {
@@ -34,10 +36,10 @@ export default function QR() {
       <div className="qr-sheet">
         {[0, 1, 2, 3].map((i) => (
           <div className="qr-card" key={i}>
-            <div className="row" style={{ justifyContent: 'center', gap: 10 }}><Logo /><b style={{ fontFamily: 'var(--f-display)', fontSize: 26 }}>{settings.shop_name}</b></div>
+            <Wordmark className="qr-logo" title={settings.shop_name} />
             <div className="qr-code" dangerouslySetInnerHTML={{ __html: svg }} />
             <div style={{ fontWeight: 600, fontSize: 18 }}>صوّر الرمز وشوف المنيو</div>
-            <div className="muted small" dir="ltr">Scan for the menu</div>
+            <div className="muted small" dir="ltr">{BRAND_EN} · Scan for the menu</div>
           </div>
         ))}
       </div>

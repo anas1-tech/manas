@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Maximize, Sun, Moon, ArrowRight, Image as ImageIcon, Languages } from 'lucide-react';
 import { db } from '../lib/db.js';
-import { Logo, navigate } from '../components/ui.jsx';
+import { navigate } from '../components/ui.jsx';
+import Wordmark from '../components/Wordmark.jsx';
+import { BRAND_EN } from '../lib/brand.js';
 import { money } from '../lib/format.js';
 
 /** شاشة المنيو للزباين — تفتح بدون تسجيل دخول وتتحدث كل دقيقة */
@@ -64,8 +66,8 @@ export default function Menu() {
         {anyPhotos && <button className="btn sm" onClick={() => setPhotos((v) => !v)}><ImageIcon size={16} /> {photos ? 'بدون صور' : 'بالصور'}</button>}
       </div>
       <header className="menu-top">
-        <h1>{data.shop.shop_name || 'المنيو'}</h1>
-        <Logo />
+        <h1 className="menu-logo"><Wordmark title={data.shop.shop_name || 'مأنس'} /></h1>
+        {L !== 'ar' && <span className="menu-en">{BRAND_EN}</span>}
       </header>
       {!data.items.length ? <p>المنيو فاضي. فعّل «يظهر في المنيو» للمنتجات.</p> : (
         <div className="menu-cols">
