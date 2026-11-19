@@ -1,4 +1,4 @@
-import { UNITS, toBase, baseOf } from './units.js';
+import { UNITS, toBase, baseOf, toMaterialBase } from './units.js';
 
 export const DEFAULT_SETTINGS = {
   id: 1,
@@ -110,19 +110,21 @@ export function makeCalc(materials, products, s, overrides = {}) {
         const m = mats.get(it.id);
         if (!m) { issues.push('مادة محذوفة'); lines.push({ ...it, name: 'مادة محذوفة', cost: 0, missing: true }); continue; }
         const mb = materialBase(m);
-        if (mb !== ub) issues.push(`وحدة ${m.name} لازم تكون من نوع ${UNITS[mb].label}`);
-        const cost = mb === ub ? costPerBase(m, s) * qtyBase : 0;
+        const q = toMaterialBase(it.qty, it.unit, m);
+        if (Number.isNaN(q)) issues.push(`«${m.name}» تنقاس بـ${mb === 'g' ? 'الوزن' : mb === 'ml' ? 'الحجم' : 'العدد'}. لو تبي تقيسها بـ${ub === 'g' ? 'الوزن' : 'الحجم'}، حط لها كثافة في صفحة المواد`);
+        const cost = Number.isNaN(q) ? 0 : costPerBase(m, s) * q;
         raw += cost;
-        lines.push({ ...it, name: m.name, cost, base: mb, baseQty: qtyBase });
+        lines.push({ ...it, name: m.name, cost, base: mb, baseQty: Number.isNaN(q) ? 0 : q });
       }
     }
     const waste = raw * ((Number(p.waste_pct) || 0) / 100);
     const total = raw + waste;
     const { net, shelf, vat } = priceParts(p, s);
     const profit = net - total;
-    const margin = net > 0 ? profit / net : null;
+    const noRecipe = !(p.items || []).some((it) => it.id);
+    const margin = net > 0 && !noRecipe ? profit / net : null;
     const liquidMl = lines.filter((l) => l.base === 'ml').reduce((a, l) => a + l.baseQty, 0);
-    const res = { id, product: p, lines, raw, waste, total, net, shelf, vat, profit, margin, liquidMl, issues, status: p.is_component ? 'none' : marginStatus(margin, s) };
+    const res = { id, product: p, lines, raw, waste, total, net, shelf, vat, profit, margin, liquidMl, issues, noRecipe, status: p.is_component ? 'none' : noRecipe ? 'norecipe' : marginStatus(margin, s) };
     cache.set(id, res);
     return res;
   }
@@ -142,4 +144,27 @@ export function productsUsingMaterial(materialId, products) {
     );
   };
   return products.filter((p) => uses(p));
+}
+
+/**
+ * كم يستهلك المنتج الواحد من مادة (بوحدة أساس المادة)، مع الخلطات والهدر.
+ */
+export function materialUsage(materialId, productId, materials, products, seen = []) {
+  const p = products.find((x) => x.id === productId);
+  const m = materials.find((x) => x.id === materialId);
+  if (!p || !m || seen.includes(productId)) return 0;
+  let total = 0;
+  for (const it of p.items || []) {
+    if (it.type === 'product') {
+      const sp = products.find((x) => x.id === it.id);
+      if (!sp) continue;
+      const yBase = toBase(sp.yield_qty || 1, sp.yield_unit || 'pcs');
+      if (!yBase || baseOf(sp.yield_unit || 'pcs') !== baseOf(it.unit)) continue;
+      total += (materialUsage(materialId, sp.id, materials, products, [...seen, productId]) / yBase) * toBase(it.qty, it.unit);
+    } else if (it.id === materialId) {
+      const q = toMaterialBase(it.qty, it.unit, m);
+      if (!Number.isNaN(q)) total += q;
+    }
+  }
+  return total * (1 + (Number(p.waste_pct) || 0) / 100);
 }

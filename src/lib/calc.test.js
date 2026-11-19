@@ -40,3 +40,38 @@ test('السعر المقترح', () => {
   assert.equal(suggestPrice(1.4, S, 65).rounded, 4);
   assert.equal(suggestPrice(1.5, S, 65).rounded, 4.5);
 });
+
+test('وحدات جديدة: أونصة وجالون وملعقة', async () => {
+  const { toBase } = await import('./units.js');
+  assert.equal(toBase(8, 'oz').toFixed(1), '236.6');
+  assert.equal(toBase(1, 'gal').toFixed(0), '3785');
+  assert.equal(toBase(2, 'tbsp'), 30);
+  assert.equal(toBase(1, 'lb').toFixed(1), '453.6');
+  assert.equal(toBase(1, 'dozen'), 12);
+});
+
+test('الكثافة: سكر بالكيلو وتقيسه بالملعقة', () => {
+  const sugar = { id: 's', name: 'سكر', package_price: 10, units_per_package: 1, unit_size: 1, size_unit: 'kg', price_includes_vat: true, density: 0.85 };
+  const tea = { id: 't', name: 'شاي', sell_price: 2, items: [{ type: 'material', id: 's', qty: 2, unit: 'tsp' }] };
+  const c = makeCalc([sugar], [tea], S).product('t');
+  // 2 ملعقة صغيرة = 10 مل × 0.85 = 8.5 جم × 0.01 = 0.085
+  assert.equal(c.total.toFixed(3), '0.085');
+  assert.equal(c.issues.length, 0);
+});
+
+test('بدون كثافة: تنبيه بدل حساب غلط', () => {
+  const sugar = { id: 's', name: 'سكر', package_price: 10, units_per_package: 1, unit_size: 1, size_unit: 'kg' };
+  const tea = { id: 't', name: 'شاي', items: [{ type: 'material', id: 's', qty: 2, unit: 'tsp' }] };
+  const c = makeCalc([sugar], [tea], S).product('t');
+  assert.equal(c.total, 0);
+  assert.equal(c.issues.length, 1);
+});
+
+test('كم كوب يطلع من الكرتون (مع الخلطة)', async () => {
+  const { materialUsage, packageBaseQty } = await import('./calc.js');
+  const mix = { id: 'mix', is_component: true, yield_qty: 2, yield_unit: 'L', items: [{ type: 'material', id: 'm1', qty: 1, unit: 'L' }] };
+  const karak = { id: 'k', items: [{ type: 'product', id: 'mix', qty: 200, unit: 'ml' }] };
+  const use = materialUsage('m1', 'k', [milk], [mix, karak]);
+  assert.equal(use, 100); // 200 مل خلطة = 100 مل حليب
+  assert.equal(packageBaseQty(milk) / use, 120); // 12 لتر ÷ 100 مل
+});

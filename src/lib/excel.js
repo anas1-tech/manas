@@ -1,9 +1,9 @@
 import * as XLSX from 'xlsx';
-import { UNITS, parseUnit, baseOf } from './units.js';
+import { UNITS, parseUnit, baseOf, adaptUnit, unitsForMaterial, unitsForBase } from './units.js';
 
 // أسماء الأعمدة ثابتة — الاستيراد يعتمد عليها
-export const MAT_COLS = ['اسم المادة', 'التصنيف', 'نوع العبوة', 'سعر العبوة', 'شامل الضريبة', 'عدد الحبات في العبوة', 'حجم الحبة', 'وحدة الحجم', 'المورد', 'ملاحظات'];
-export const PROD_COLS = ['اسم المنتج', 'الحجم', 'التصنيف', 'سعر البيع', 'شامل الضريبة', 'حجم الكوب (مل)', 'نسبة الهدر %', 'يظهر في المنيو', 'مكوّن يُدمج', 'الكمية الناتجة', 'وحدة الناتج', 'الوصف'];
+export const MAT_COLS = ['اسم المادة', 'التصنيف', 'نوع العبوة', 'سعر العبوة', 'شامل الضريبة', 'عدد الحبات في العبوة', 'حجم الحبة', 'وحدة الحجم', 'كثافة (جرام لكل 1 مل)', 'المورد', 'ملاحظات'];
+export const PROD_COLS = ['اسم المنتج', 'الحجم', 'التصنيف', 'سعر البيع', 'شامل الضريبة', 'حجم الكوب', 'وحدة الكوب', 'نسبة الهدر %', 'يظهر في المنيو', 'مكوّن يُدمج', 'الكمية الناتجة', 'وحدة الناتج', 'الوصف'];
 export const RECIPE_COLS = ['اسم المنتج', 'الحجم', 'المكوّن', 'الكمية', 'الوحدة'];
 
 const yes = (v) => ['نعم', 'yes', 'y', '1', 'true', 'صح', '✓'].includes(String(v ?? '').trim().toLowerCase());
@@ -33,7 +33,11 @@ const HELP = [
   ['1) ورقة «المواد»: كل شي تشتريه (حليب، شاي، أكواب...).'],
   ['   مثال: كرتون حليب فيه 12 علبة كل علبة 1 لتر بسعر 66 ← سعر العبوة 66، عدد الحبات 12، حجم الحبة 1، وحدة الحجم لتر.'],
   ['   إذا الشي يُحسب بالحبة (أكواب، أغطية) ← حجم الحبة 1 ووحدة الحجم حبة.'],
-  ['   الوحدات المقبولة: جرام، كيلو، مل، لتر، حبة.'],
+  ['   الوحدات المقبولة:'],
+  ['     الحجم: مل، سنتيلتر، لتر، أونصة (سائلة)، شوت، ملعقة صغيرة، ملعقة كبيرة، كوب قياس، باينت، كوارت، جالون'],
+  ['     الوزن: جرام، مليجرام، كيلو، أونصة وزن، باوند'],
+  ['     العدد: حبة، درزن'],
+  ['   «كثافة» اختيارية: كم جرام في 1 مل. مثلاً السكر 0.85، وبعدها تقدر تكتب السكر في الوصفة بالملعقة.'],
   [''],
   ['2) ورقة «المنتجات»: اللي تبيعه للزبون، وكل حجم في سطر (كرك صغير، كرك وسط).'],
   ['   «مكوّن يُدمج» = نعم إذا هو خلطة تستخدمها داخل منتجات ثانية (مثل خلطة كرك تطلع 2 لتر).'],
@@ -41,6 +45,8 @@ const HELP = [
   ['3) ورقة «الوصفات»: كم يدخل في الكوب الواحد من كل مكوّن.'],
   ['   كل مكوّن في سطر: اسم المنتج + الحجم + اسم المادة (أو اسم الخلطة) + الكمية + الوحدة.'],
   ['   مثال: كرك | وسط | خلطة كرك | 270 | مل'],
+  ['   مثال: لاتيه | وسط | حليب طازج | 8 | أونصة'],
+  ['   «حجم الكوب» في المنتجات تقدر تكتبه بالمل أو الأونصة: 12 + أونصة، أو 350 + مل.'],
   [''],
   ['الأسماء لازم تكون نفسها بالضبط بين الأوراق.'],
   ['إذا رفعت الملف مرة ثانية، الموقع يحدّث الموجود بنفس الاسم ويضيف الجديد.'],
@@ -49,8 +55,8 @@ const HELP = [
 function rowsFrom(materials, products) {
   const matName = new Map(materials.map((m) => [m.id, m.name]));
   const prodName = new Map(products.map((p) => [p.id, p.name]));
-  const mRows = materials.map((m) => [m.name, m.category, m.package_name, m.package_price, yn(m.price_includes_vat), m.units_per_package, m.unit_size, UNITS[m.size_unit]?.label ?? 'حبة', m.supplier, m.notes]);
-  const pRows = products.map((p) => [p.name, p.size, p.category, p.sell_price, yn(p.price_includes_vat), p.serving_ml ?? '', p.waste_pct ?? 0, yn(p.on_menu), yn(p.is_component), p.is_component ? p.yield_qty : '', p.is_component ? UNITS[p.yield_unit]?.label : '', p.description]);
+  const mRows = materials.map((m) => [m.name, m.category, m.package_name, m.package_price, yn(m.price_includes_vat), m.units_per_package, m.unit_size, UNITS[m.size_unit]?.label ?? 'حبة', m.density || '', m.supplier, m.notes]);
+  const pRows = products.map((p) => [p.name, p.size, p.category, p.sell_price, yn(p.price_includes_vat), p.serving_ml ? +(p.serving_ml / UNITS[p.serving_unit || 'ml'].f).toFixed(2) : '', p.serving_ml ? UNITS[p.serving_unit || 'ml'].label : '', p.waste_pct ?? 0, yn(p.on_menu), yn(p.is_component), p.is_component ? p.yield_qty : '', p.is_component ? UNITS[p.yield_unit]?.label : '', p.description]);
   const rRows = products.flatMap((p) => (p.items || []).map((it) => [p.name, p.size, (it.type === 'product' ? prodName : matName).get(it.id) ?? '', it.qty, UNITS[it.unit]?.label ?? it.unit]));
   return { mRows, pRows, rRows };
 }
@@ -59,8 +65,8 @@ export function downloadTemplate(materials = [], products = [], filename = 'نم
   const { mRows, pRows, rRows } = rowsFrom(materials, products);
   const wb = book([
     ['طريقة التعبئة', sheet(HELP.slice(1), HELP[0], [110])],
-    ['المواد', sheet(mRows, MAT_COLS, [26, 14, 12, 12, 12, 18, 12, 12, 16, 20])],
-    ['المنتجات', sheet(pRows, PROD_COLS, [22, 10, 16, 10, 12, 14, 12, 14, 12, 14, 12, 26])],
+    ['المواد', sheet(mRows, MAT_COLS, [26, 14, 12, 12, 12, 18, 12, 14, 20, 16, 20])],
+    ['المنتجات', sheet(pRows, PROD_COLS, [22, 10, 16, 10, 12, 12, 14, 12, 14, 12, 14, 14, 26])],
     ['الوصفات', sheet(rRows, RECIPE_COLS, [22, 10, 26, 10, 10])],
   ]);
   XLSX.writeFile(wb, filename);
@@ -106,7 +112,8 @@ export async function parseWorkbook(file, existing) {
     if (!Number.isFinite(price) || price < 0) { errors.push(`المواد سطر ${row}: سعر العبوة غير صحيح لـ «${name}»`); return; }
     if (!Number.isFinite(units) || units <= 0) { errors.push(`المواد سطر ${row}: عدد الحبات غير صحيح لـ «${name}»`); return; }
     if (!Number.isFinite(size) || size <= 0) { errors.push(`المواد سطر ${row}: حجم الحبة غير صحيح لـ «${name}»`); return; }
-    if (!unit) { errors.push(`المواد سطر ${row}: الوحدة «${s(r['وحدة الحجم'])}» مو معروفة (استخدم جرام، كيلو، مل، لتر، حبة)`); return; }
+    if (!unit) { errors.push(`المواد سطر ${row}: الوحدة «${s(r['وحدة الحجم'])}» مو معروفة (شوف ورقة طريقة التعبئة)`); return; }
+    const dens = n(r['كثافة (جرام لكل 1 مل)']);
     const prev = matByName.get(name);
     const m = {
       ...(prev || {}),
@@ -114,6 +121,7 @@ export async function parseWorkbook(file, existing) {
       name, category: s(r['التصنيف']), package_name: s(r['نوع العبوة']) || 'كرتون',
       package_price: price, price_includes_vat: r['شامل الضريبة'] === '' ? true : yes(r['شامل الضريبة']),
       units_per_package: units, unit_size: size, size_unit: unit,
+      density: Number.isFinite(dens) && dens > 0 && baseOf(unit) !== 'pcs' ? dens : null,
       supplier: s(r['المورد']), notes: s(r['ملاحظات']),
     };
     matByName.set(name, m);
@@ -145,7 +153,7 @@ export async function parseWorkbook(file, existing) {
       name, size: s(r['الحجم']), category: s(r['التصنيف']),
       sell_price: Number.isFinite(price) ? price : 0,
       price_includes_vat: r['شامل الضريبة'] === '' ? true : yes(r['شامل الضريبة']),
-      serving_ml: Number.isFinite(n(r['حجم الكوب (مل)'])) ? n(r['حجم الكوب (مل)']) : null,
+      ...serving(r),
       waste_pct: Number.isFinite(n(r['نسبة الهدر %'])) ? n(r['نسبة الهدر %']) : 0,
       on_menu: comp ? false : r['يظهر في المنيو'] === '' ? true : yes(r['يظهر في المنيو']),
       is_component: comp,
@@ -157,6 +165,14 @@ export async function parseWorkbook(file, existing) {
     touched.set(key, p);
     prev ? out.summary.prodUpd++ : out.summary.prodNew++;
   });
+
+  function serving(r) {
+    const v = n(r['حجم الكوب'] !== undefined ? r['حجم الكوب'] : r['حجم الكوب (مل)']);
+    let u = parseUnit(r['وحدة الكوب']) || 'ml';
+    u = adaptUnit(u, 'ml');
+    if (baseOf(u) !== 'ml') u = 'ml';
+    return Number.isFinite(v) && v > 0 ? { serving_ml: +(v * UNITS[u].f).toFixed(1), serving_unit: u } : { serving_ml: null, serving_unit: 'ml' };
+  }
 
   // الوصفات: تستبدل مكونات أي منتج مذكور فيها
   const recipeRows = get('الوصفات');
@@ -171,14 +187,16 @@ export async function parseWorkbook(file, existing) {
     if (!p) { errors.push(`الوصفات سطر ${row}: المنتج «${name}${s(r['الحجم']) ? ' ' + s(r['الحجم']) : ''}» مو موجود في ورقة المنتجات`); return; }
     const ing = s(r['المكوّن']);
     const q = n(r['الكمية']);
-    const unit = parseUnit(r['الوحدة']);
+    let unit = parseUnit(r['الوحدة']);
     const mat = matByName.get(ing);
     const comp = compByName.get(ing);
     if (!mat && !comp) { errors.push(`الوصفات سطر ${row}: المكوّن «${ing}» مو موجود في المواد ولا الخلطات`); return; }
     if (!Number.isFinite(q) || q <= 0) { errors.push(`الوصفات سطر ${row}: الكمية غير صحيحة`); return; }
     if (!unit) { errors.push(`الوصفات سطر ${row}: الوحدة «${s(r['الوحدة'])}» مو معروفة`); return; }
     const targetBase = mat ? baseOf(mat.size_unit) : baseOf(comp.yield_unit);
-    if (baseOf(unit) !== targetBase) { errors.push(`الوصفات سطر ${row}: «${ing}» يُقاس بـ ${UNITS[targetBase].label} مو ${UNITS[unit].label}`); return; }
+    unit = adaptUnit(unit, targetBase);
+    const allowed = mat ? unitsForMaterial(mat) : unitsForBase(targetBase);
+    if (!allowed.includes(unit)) { errors.push(`الوصفات سطر ${row}: «${ing}» تنقاس بـ${targetBase === 'g' ? 'الوزن' : targetBase === 'ml' ? 'الحجم' : 'العدد'}، فما ينفع ${UNITS[unit].label}${mat && targetBase !== 'pcs' ? ' إلا لو حطيت لها كثافة' : ''}`); return; }
     if (!newItems.has(key)) newItems.set(key, []);
     newItems.get(key).push(mat ? { type: 'material', id: mat.id, qty: q, unit } : { type: 'product', id: comp.id, qty: q, unit });
     out.summary.recipes++;

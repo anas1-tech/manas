@@ -25,4 +25,5 @@ export const STATUS = {
   warn: { label: 'ربح متوسط', short: 'متوسط' },
   bad: { label: 'ربح ضعيف', short: 'ضعيف' },
   none: { label: 'بدون سعر', short: '—' },
+  norecipe: { label: 'بدون وصفة', short: 'بدون وصفة' },
 };

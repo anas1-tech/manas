@@ -14,6 +14,7 @@ export default function Dashboard() {
   const priced = sellable.filter((c) => c.margin != null);
   const avg = priced.length ? priced.reduce((a, c) => a + c.margin, 0) / priced.length : null;
   const needs = priced.filter((c) => c.status !== 'good');
+  const noRecipe = sellable.filter((c) => c.noRecipe);
   const best = [...priced].sort((a, b) => b.profit - a.profit)[0];
   const cheapest = [...priced].sort((a, b) => a.total - b.total)[0];
 
@@ -51,7 +52,7 @@ export default function Dashboard() {
     );
   }
 
-  const bars = [...sellable].sort((a, b) =>
+  const bars = [...sellable].filter((c) => !c.noRecipe).sort((a, b) =>
     sort === 'margin' ? (b.margin ?? -1) - (a.margin ?? -1) : sort === 'profit' ? b.profit - a.profit : a.product.name.localeCompare(b.product.name, 'ar'));
   const maxM = Math.max(1, ...sellable.map((c) => c.margin ?? 0)) ;
   const target = (Number(settings.target_margin) || 0) / 100;
@@ -69,10 +70,11 @@ export default function Dashboard() {
       <div className="hero">
         <div className="hero-main">
           <h2>متوسط هامش الربح</h2>
-          <div className="big num">{pct(avg)}</div>
+          <div className="big num">{avg == null ? '—' : pct(avg)}</div>
           <p>{needs.length === 0
             ? `كل المنتجات فوق هدفك ${settings.target_margin}%. ممتاز.`
-            : `${needs.length} من ${priced.length} منتج تحت هدفك ${settings.target_margin}%. شيّك عليها تحت.`}</p>
+            : `${needs.length} من ${priced.length} منتج تحت هدفك ${settings.target_margin}%. شيّك عليها تحت.`}
+            {noRecipe.length > 0 && ` و${noRecipe.length} منتج بدون وصفة، أضف مكوناتها عشان ينحسب ربحها.`}</p>
           <svg className="pod" viewBox="0 0 100 160" aria-hidden="true"><path d="M50 4C22 30 10 70 18 110c6 30 26 46 32 46s26-16 32-46C90 70 78 30 50 4Z" fill="currentColor" /></svg>
         </div>
         <div className="stats">
@@ -91,6 +93,7 @@ export default function Dashboard() {
               {[['margin', 'بالهامش'], ['profit', 'بالريال'], ['name', 'بالاسم']].map(([k, l]) => <button key={k} aria-pressed={sort === k} onClick={() => setSort(k)}>{l}</button>)}
             </div>
           </div>
+          {!bars.length && <p className="muted small">أضف مكونات المنتجات عشان يطلع ربح كل واحد هنا.</p>}
           <div className="mbars">
             {bars.map((c) => {
               const I = ICON[c.status];

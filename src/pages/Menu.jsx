@@ -22,15 +22,17 @@ export default function Menu() {
   if (err && !data) return <div className="menu-page"><p>ما قدرنا نحمّل المنيو. تأكد من الإنترنت.</p></div>;
   if (!data) return <div className="menu-page" aria-busy="true" />;
 
-  // تجميع: التصنيف ← المنتج ← الأحجام
+  // تجميع: التصنيف ← المنتج ← الأحجام (بنفس ترتيب المنتجات)
   const cats = new Map();
+  const sizeRank = new Map();
   for (const it of [...data.items].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))) {
     const c = it.category || 'المشروبات';
     if (!cats.has(c)) cats.set(c, new Map());
     const byName = cats.get(c);
-    if (!byName.has(it.name)) byName.set(it.name, { name: it.name, description: it.description, sizes: {} });
+    if (!byName.has(it.name)) byName.set(it.name, { name: it.name, description: it.description, sizes: new Map() });
     const row = byName.get(it.name);
-    row.sizes[it.size || ''] = it.shelf_price;
+    row.sizes.set(it.size || '', it.shelf_price);
+    if (!sizeRank.has(it.size || '')) sizeRank.set(it.size || '', sizeRank.size);
     if (!row.description && it.description) row.description = it.description;
   }
 
@@ -47,25 +49,34 @@ export default function Menu() {
       </header>
       {!data.items.length ? <p>المنيو فاضي. فعّل «يظهر في المنيو» للمنتجات.</p> : (
         <div className="menu-cols">
-          {[...cats].map(([cat, rows]) => {
-            const sizes = [...new Set([...rows.values()].flatMap((r) => Object.keys(r.sizes)))];
-            const order = ['صغير', 'وسط', 'كبير'];
-            sizes.sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+          {[...cats].map(([cat, rowsMap]) => {
+            const rows = [...rowsMap.values()];
+            // الأعمدة = أحجام المنتجات اللي لها أكثر من حجم
+            const cols = [...new Set(rows.filter((r) => r.sizes.size > 1).flatMap((r) => [...r.sizes.keys()]))]
+              .sort((a, b) => sizeRank.get(a) - sizeRank.get(b));
+            const n = Math.max(cols.length, 1);
             return (
-              <section className="menu-cat" key={cat}>
+              <section className={`menu-cat${cols.length > 4 ? ' wide' : ''}`} key={cat}>
                 <h2>{cat}</h2>
-                <div className="menu-sizes" style={{ '--n': sizes.length }}>
-                  {(sizes.length > 1 || sizes[0]) && <><span />{sizes.map((s) => <span className="hd" key={s}>{s || '—'}</span>)}</>}
-                  {[...rows.values()].map((r) => (
-                    <div className="menu-row" key={r.name}>
-                      <span className="menu-name"><span>{r.name}</span>{r.description && <small>{r.description}</small>}</span>
-                      {sizes.map((s) => (
-                        <span key={s} className={`menu-price${r.sizes[s] == null ? ' none' : ''}`}>
-                          {r.sizes[s] == null ? '–' : <>{fmt(r.sizes[s])}</>}
+                <div className="menu-sizes" style={{ '--n': n }}>
+                  {cols.length > 0 && <><span />{cols.map((s) => <span className="hd" key={s}>{s || '—'}</span>)}</>}
+                  {rows.map((r) => {
+                    const only = r.sizes.size === 1 ? [...r.sizes][0] : null;
+                    const inCols = only && cols.includes(only[0]);
+                    return (
+                      <div className="menu-row" key={r.name}>
+                        <span className="menu-name">
+                          <span>{r.name}{only && !inCols && only[0] && <em className="menu-size">{only[0]}</em>}</span>
+                          {r.description && <small>{r.description}</small>}
                         </span>
-                      ))}
-                    </div>
-                  ))}
+                        {only && !inCols ? (
+                          <>{n > 1 && <span style={{ gridColumn: `span ${n - 1}` }} />}<span className="menu-price">{fmt(only[1])}</span></>
+                        ) : cols.length ? cols.map((s) => (
+                          <span key={s} className={`menu-price${r.sizes.get(s) == null ? ' none' : ''}`}>{r.sizes.get(s) == null ? '–' : fmt(r.sizes.get(s))}</span>
+                        )) : <span className="menu-price">{fmt([...r.sizes.values()][0])}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             );

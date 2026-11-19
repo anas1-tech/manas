@@ -10,6 +10,15 @@ export const supabase = isRemote ? createClient(URL, KEY) : null;
 
 const TABLES = ['materials', 'products', 'price_history'];
 
+// أعمدة انضافت في تحديثات لاحقة. لو قاعدة البيانات قديمة نحذفها قبل الحفظ بدل ما يفشل
+const NEW_COLS = { materials: ['density'], products: ['serving_unit'] };
+export let schemaOutdated = false;
+const markOutdated = () => {
+  if (schemaOutdated) return;
+  schemaOutdated = true;
+  window.dispatchEvent(new Event('schema-outdated'));
+};
+
 // ───────── Supabase ─────────
 const remoteDb = {
   async loadAll() {
@@ -20,12 +29,21 @@ const remoteDb = {
       supabase.from('price_history').select('*').order('recorded_at'),
     ]);
     for (const r of [s, m, p, h]) if (r.error) throw r.error;
+    const probe = await supabase.from('materials').select('density').limit(1);
+    const probe2 = await supabase.from('products').select('serving_unit').limit(1);
+    if (probe.error || probe2.error) markOutdated();
     return { settings: { ...DEFAULT_SETTINGS, ...(s.data || {}) }, materials: m.data, products: p.data, history: h.data };
   },
   async upsert(table, rows) {
     const list = Array.isArray(rows) ? rows : [rows];
     if (!list.length) return;
-    const { error } = await supabase.from(table).upsert(list.map(clean));
+    let rows2 = list.map(clean);
+    if (schemaOutdated && NEW_COLS[table]) rows2 = rows2.map((r) => strip(r, NEW_COLS[table]));
+    let { error } = await supabase.from(table).upsert(rows2);
+    if (error && NEW_COLS[table] && /column/i.test(error.message)) {
+      markOutdated();
+      ({ error } = await supabase.from(table).upsert(rows2.map((r) => strip(r, NEW_COLS[table]))));
+    }
     if (error) throw error;
   },
   async remove(table, id) {
@@ -51,6 +69,12 @@ const remoteDb = {
     return () => supabase.removeChannel(ch);
   },
 };
+
+function strip(row, cols) {
+  const o = { ...row };
+  for (const c of cols) delete o[c];
+  return o;
+}
 
 function clean(row) {
   const out = {};

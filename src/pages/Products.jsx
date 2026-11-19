@@ -2,16 +2,18 @@ import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Copy, X, Layers, Sparkles } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { makeCalc, suggestPrice } from '../lib/calc.js';
-import { UNITS, unitsForBase, baseOf } from '../lib/units.js';
+import { UNITS, unitsForBase, unitsForMaterial, baseOf, BASE_NAME } from '../lib/units.js';
 import { money, num, pct, CUR } from '../lib/format.js';
 import { Field, NumInput, Switch, Sheet, Empty, MarginChip, useConfirm, navigate } from '../components/ui.jsx';
 import { CostBar, Cup, colorLines, OTHER } from '../components/charts.jsx';
 
 const SIZES = ['صغير', 'وسط', 'كبير'];
-const CUP_SIZES = [120, 180, 240, 300, 350, 480];
+// أحجام الأكواب الشائعة حسب الوحدة
+const CUP_SIZES = { ml: [120, 180, 240, 300, 350, 480], oz: [4, 6, 8, 10, 12, 16, 20], L: [0.25, 0.5, 1], cup: [0.5, 1, 1.5, 2] };
+const SERVING_UNITS = ['ml', 'oz', 'L', 'cup'];
 
 export const blankProduct = (s) => ({
-  id: crypto.randomUUID(), name: '', size: '', category: '', description: '', serving_ml: 240, waste_pct: Number(s.default_waste) || 0,
+  id: crypto.randomUUID(), name: '', size: '', category: '', description: '', serving_ml: 240, serving_unit: 'ml', waste_pct: Number(s.default_waste) || 0,
   sell_price: '', price_includes_vat: true, on_menu: true, is_component: false, yield_qty: 1, yield_unit: 'pcs', sort: 0, items: [],
 });
 
@@ -127,13 +129,20 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
   const setItem = (i, patch) => setP((x) => ({ ...x, items: x.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
   const removeItem = (i) => setP((x) => ({ ...x, items: x.items.filter((_, j) => j !== i) }));
   const addItem = () => setP((x) => ({ ...x, items: [...x.items, { type: 'material', id: '', qty: '', unit: 'ml' }] }));
+  const allowedUnits = (it) => {
+    if (!it.id) return [];
+    if (it.type === 'product') return unitsForBase(baseOf(products.find((x) => x.id === it.id)?.yield_unit));
+    return unitsForMaterial(materials.find((m) => m.id === it.id));
+  };
   const pick = (i, key) => {
     const [type, id] = key.split(':');
-    const base = type === 'product' ? baseOf(products.find((x) => x.id === id)?.yield_unit) : baseOf(materials.find((m) => m.id === id)?.size_unit);
+    const allowed = allowedUnits({ type, id });
     const cur = p.items[i];
-    const unit = baseOf(cur.unit) === base ? cur.unit : base;
-    setItem(i, { type, id, unit, qty: cur.qty || (base === 'pcs' ? 1 : '') });
+    const unit = allowed.includes(cur.unit) ? cur.unit : allowed[0] || 'pcs';
+    setItem(i, { type, id, unit, qty: cur.qty || (baseOf(unit) === 'pcs' ? 1 : '') });
   };
+  const sUnit = p.serving_unit || 'ml';
+  const sF = UNITS[sUnit].f;
 
   const colored = colorLines(live.lines);
   const colorOf = (it) => colored.find((c) => c.id === it.id && c.type === it.type)?.color || OTHER;
@@ -180,9 +189,14 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
               <input className="input" list="sizes" value={p.size} onChange={(e) => set('size')(e.target.value)} placeholder="صغير، وسط، كبير" />
               <datalist id="sizes">{SIZES.map((s) => <option key={s} value={s} />)}</datalist>
             </Field>
-            <Field label="الكوب يشيل كم مل؟">
-              <NumInput value={p.serving_ml ?? ''} onChange={set('serving_ml')} suffix="مل" />
-              <div className="chips" style={{ marginTop: 4 }}>{CUP_SIZES.map((s) => <button type="button" key={s} className="filter-chip" style={{ padding: '2px 10px', fontSize: 13 }} aria-pressed={Number(p.serving_ml) === s} onClick={() => set('serving_ml')(s)}><span className="num">{s}</span></button>)}</div>
+            <Field label="حجم الكوب" hint={sUnit !== 'ml' && p.serving_ml ? `= ${num(p.serving_ml, 0)} مل` : ''}>
+              <div className="row" style={{ flexWrap: 'nowrap' }}>
+                <NumInput value={p.serving_ml ? +(p.serving_ml / sF).toFixed(2) : ''} onChange={(v) => set('serving_ml')(v === '' ? '' : +(v * sF).toFixed(1))} />
+                <select className="select input" style={{ width: 150 }} value={sUnit} onChange={(e) => set('serving_unit')(e.target.value)} aria-label="وحدة حجم الكوب">
+                  {SERVING_UNITS.map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
+                </select>
+              </div>
+              <div className="chips" style={{ marginTop: 4 }}>{CUP_SIZES[sUnit].map((v) => <button type="button" key={v} className="filter-chip" style={{ padding: '2px 10px', fontSize: 13 }} aria-pressed={Math.abs(Number(p.serving_ml) - v * sF) < 0.5} onClick={() => set('serving_ml')(+(v * sF).toFixed(1))}><span className="num">{v}</span> {UNITS[sUnit].short}</button>)}</div>
             </Field>
           </div>
         )}
@@ -192,8 +206,8 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
           <Field label="كم تطلع الخلطة؟" hint="الكمية الجاهزة بعد التحضير. منها تنحسب تكلفة كل مل في الكوب.">
             <div className="row" style={{ flexWrap: 'nowrap' }}>
               <NumInput value={p.yield_qty} onChange={set('yield_qty')} />
-              <select className="select input" style={{ width: 120 }} value={p.yield_unit} onChange={(e) => set('yield_unit')(e.target.value)}>
-                {['L', 'ml', 'kg', 'g', 'pcs'].map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
+              <select className="select input" style={{ width: 170 }} value={p.yield_unit} onChange={(e) => set('yield_unit')(e.target.value)}>
+                {['ml', 'g', 'pcs'].map((b) => <optgroup key={b} label={BASE_NAME[b]}>{unitsForBase(b).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}</optgroup>)}
               </select>
             </div>
           </Field>
@@ -230,7 +244,8 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
         <div className="ing-list">
           {p.items.map((it, i) => {
             const line = live.lines[i];
-            const base = it.id ? (it.type === 'product' ? baseOf(products.find((x) => x.id === it.id)?.yield_unit) : baseOf(materials.find((m) => m.id === it.id)?.size_unit)) : null;
+            const allowed = allowedUnits(it);
+            const bases = [...new Set(allowed.map(baseOf))];
             return (
               <div className="ing" key={i}>
                 <span className="dot" style={{ background: it.id ? colorOf(it) : 'transparent' }} />
@@ -240,8 +255,11 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
                   <optgroup label="مواد">{[...materials].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map((m) => <option key={m.id} value={`material:${m.id}`}>{m.name}</option>)}</optgroup>
                 </select>
                 <div className="ing-qty"><NumInput value={it.qty} onChange={(v) => setItem(i, { qty: v })} aria-label="الكمية" /></div>
-                <select className="select input ing-unit" value={it.unit} onChange={(e) => setItem(i, { unit: e.target.value })} aria-label="الوحدة" disabled={!base}>
-                  {(base ? unitsForBase(base) : [it.unit]).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
+                <select className="select input ing-unit" value={it.unit} onChange={(e) => setItem(i, { unit: e.target.value })} aria-label="الوحدة" disabled={!allowed.length}>
+                  {!allowed.length && <option value={it.unit}>{UNITS[it.unit]?.label}</option>}
+                  {bases.length > 1
+                    ? bases.map((b) => <optgroup key={b} label={BASE_NAME[b]}>{allowed.filter((u) => baseOf(u) === b).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}</optgroup>)
+                    : allowed.map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
                 </select>
                 <span className="ing-cost num">{line && it.id ? money(line.cost) : ''}</span>
                 <button className="btn icon ghost del" style={{ width: 34, minHeight: 34 }} onClick={() => removeItem(i)} aria-label="شيل المكوّن"><X size={16} /></button>

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { costPerBase, costPerPiece, effectivePackagePrice, materialBase, packageBaseQty, productsUsingMaterial } from '../lib/calc.js';
-import { UNITS, BASE_BIG } from '../lib/units.js';
+import { costPerBase, costPerPiece, effectivePackagePrice, materialBase, packageBaseQty, productsUsingMaterial, materialUsage } from '../lib/calc.js';
+import { UNITS, BASE_BIG, DENSITY_PRESETS } from '../lib/units.js';
 import { money, tiny, num, CUR } from '../lib/format.js';
 import { Field, NumInput, Switch, Sheet, Empty, Delta, useConfirm, navigate } from '../components/ui.jsx';
 import { Sparkline } from '../components/charts.jsx';
@@ -11,7 +11,7 @@ const PACKS = ['كرتون', 'كيس', 'علبة', 'جالون', 'ربطة', 'ش
 
 export const blankMaterial = () => ({
   id: crypto.randomUUID(), name: '', category: '', package_name: 'كرتون', package_price: '', price_includes_vat: true,
-  units_per_package: 1, unit_size: 1, size_unit: 'pcs', supplier: '', notes: '',
+  units_per_package: 1, unit_size: 1, size_unit: 'pcs', density: null, supplier: '', notes: '',
 });
 
 export function packText(m) {
@@ -105,6 +105,8 @@ export default function Materials() {
           onDelete={async (id) => { setEdit(null); await deleteMaterial(id); }}
           history={history.filter((h) => h.material_id === edit.id)}
           usedIn={productsUsingMaterial(edit.id, products)}
+          products={products}
+          materials={materials}
           settings={settings}
           cats={cats}
         />
@@ -113,7 +115,7 @@ export default function Materials() {
   );
 }
 
-function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, usedIn, settings, cats }) {
+function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, usedIn, settings, cats, products, materials }) {
   const [m, setM] = useState(initial);
   const [confirm, confirmUi] = useConfirm();
   const set = (k) => (v) => setM((x) => ({ ...x, [k]: v }));
@@ -136,7 +138,7 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
       onClose={onClose}
       footer={
         <>
-          <button className="btn primary" disabled={!valid} onClick={() => onSave({ ...m, name: m.name.trim(), package_price: Number(m.package_price), units_per_package: Number(m.units_per_package), unit_size: Number(m.unit_size) })}>حفظ المادة</button>
+          <button className="btn primary" disabled={!valid} onClick={() => onSave({ ...m, name: m.name.trim(), package_price: Number(m.package_price), units_per_package: Number(m.units_per_package), unit_size: Number(m.unit_size), density: kind !== 'pcs' && Number(m.density) > 0 ? Number(m.density) : null })}>حفظ المادة</button>
           <button className="btn" onClick={onClose}>إلغاء</button>
           <span className="spacer" />
           {!isNew && (
@@ -184,13 +186,25 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
             <Field label="حجم الحبة الواحدة">
               <div className="row" style={{ flexWrap: 'nowrap' }}>
                 <NumInput value={m.unit_size} onChange={set('unit_size')} />
-                <select className="select input" style={{ width: 110 }} value={m.size_unit} onChange={(e) => set('size_unit')(e.target.value)}>
+                <select className="select input" style={{ width: 150 }} value={m.size_unit} onChange={(e) => set('size_unit')(e.target.value)}>
                   {Object.entries(UNITS).filter(([, u]) => u.base === kind).map(([k, u]) => <option key={k} value={k}>{u.label}</option>)}
                 </select>
               </div>
             </Field>
           )}
         </div>
+        {kind !== 'pcs' && (
+          <Field label={kind === 'g' ? 'تبي تقيسها بالملعقة أو المل؟ (اختياري)' : 'تبي تقيسها بالجرام؟ (اختياري)'}
+            hint={Number(m.density) > 0 ? `1 مل = ${num(m.density, 3)} جرام، والحين تقدر تستخدم وحدات ${kind === 'g' ? 'الحجم' : 'الوزن'} في الوصفات` : 'حط كم جرام في 1 مل، مثلاً تشتري السكر بالكيلو وتحطه بالملعقة'}>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <span className="muted small" style={{ whiteSpace: 'nowrap' }}>1 مل =</span>
+              <NumInput value={m.density ?? ''} onChange={set('density')} suffix="جرام" />
+            </div>
+            <div className="chips" style={{ marginTop: 4 }}>
+              {DENSITY_PRESETS.map(([l, d]) => <button type="button" key={l} className="filter-chip" style={{ padding: '2px 10px', fontSize: 13 }} aria-pressed={Number(m.density) === d} onClick={() => set('density')(d)}>{l}</button>)}
+            </div>
+          </Field>
+        )}
       </div>
 
       {valid && (
@@ -208,6 +222,8 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
               <>
                 <div><span>كل 1 {UNITS[base].short}</span><b className="num">{tiny(per)} {CUR}</b></div>
                 <div><span>كل 1 {UNITS[BASE_BIG[base]].label}</span><b className="num">{money(per * 1000)} {CUR}</b></div>
+                <div><span>كل 1 أونصة</span><b className="num">{tiny(per * UNITS[base === 'ml' ? 'oz' : 'ozw'].f)} {CUR}</b></div>
+                {base === 'ml' && <div><span>كل جالون</span><b className="num">{money(per * UNITS.gal.f)} {CUR}</b></div>}
               </>
             )}
           </div>
@@ -221,10 +237,25 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
         </div>
       )}
 
-      {!isNew && usedIn.length > 0 && (
+      {!isNew && usedIn.length > 0 && valid && (
         <div className="panel">
-          <h3 style={{ marginBottom: 8 }}>تدخل في</h3>
-          <div className="chips">{usedIn.map((p) => <span className="chip" key={p.id}>{p.name}{p.size ? ` ${p.size}` : ''}</span>)}</div>
+          <h3 style={{ marginBottom: 4 }}>ال{m.package_name || 'عبوة'} يكفي لكم كوب؟</h3>
+          <p className="muted small" style={{ marginTop: 0 }}>محسوبة من الوصفة والهدر، ومع الخلطات المدموجة.</p>
+          <table className="table">
+            <tbody>
+              {usedIn.filter((p) => !p.is_component).map((p) => {
+                const use = materialUsage(m.id, p.id, materials.map((x) => (x.id === m.id ? m : x)), products);
+                const cups = use > 0 ? Math.floor(packageBaseQty(m) / use) : null;
+                return (
+                  <tr key={p.id}>
+                    <td>{p.name} <span className="muted">{p.size}</span></td>
+                    <td className="n muted small"><span className="num">{num(use, 2)}</span> {UNITS[base].short} للكوب</td>
+                    <td className="n"><b className="num">{cups == null ? '—' : num(cups, 0)}</b> كوب</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

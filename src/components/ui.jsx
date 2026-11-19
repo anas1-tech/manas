@@ -142,6 +142,7 @@ export function useConfirm() {
 
 const STATUS_ICON = { good: CircleCheck, warn: CircleAlert, bad: OctagonAlert };
 export function MarginChip({ margin, status, withLabel = false }) {
+  if (status === 'norecipe') return <span className="chip">بدون وصفة</span>;
   if (status === 'none' || margin == null) return <span className="chip">بدون سعر</span>;
   const I = STATUS_ICON[status];
   return (
