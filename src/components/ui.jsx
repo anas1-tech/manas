@@ -3,17 +3,20 @@ import { X, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Minus, Circle
 import { STATUS, pct } from '../lib/format.js';
 
 // ───────── التنقل ─────────
+// BASE = '/mans-coffee-cost' على GitHub Pages، أو '' محلياً
+export const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+export const href = (to) => BASE + to;
 const subs = new Set();
 window.addEventListener('popstate', () => subs.forEach((f) => f()));
 export function navigate(to) {
-  if (to === location.pathname + location.search) return;
-  history.pushState(null, '', to);
+  if (href(to) === location.pathname + location.search) return;
+  history.pushState(null, '', href(to));
   subs.forEach((f) => f());
   window.scrollTo(0, 0);
 }
-export const usePath = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => location.pathname);
+export const usePath = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => location.pathname.slice(BASE.length).replace(/(.)\/$/, '$1') || '/');
 export function Link({ to, children, ...rest }) {
-  return <a href={to} onClick={(e) => { if (e.metaKey || e.ctrlKey || rest.target === '_blank') return; e.preventDefault(); navigate(to); }} {...rest}>{children}</a>;
+  return <a href={href(to)} onClick={(e) => { if (e.metaKey || e.ctrlKey || rest.target === '_blank') return; e.preventDefault(); navigate(to); }} {...rest}>{children}</a>;
 }
 
 // ───────── الشعار: استكانة شاي مع حبة هيل ─────────

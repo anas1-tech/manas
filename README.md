@@ -19,26 +19,26 @@ npm run dev
 
 بدون إعدادات Supabase، الموقع يشتغل في **وضع تجريبي** والبيانات تنحفظ في المتصفح.
 
-## الرفع (مرة وحدة)
+## الاستضافة: GitHub Pages
 
-### 1) Supabase (قاعدة البيانات)
+الموقع منشور على: **https://anas1-tech.github.io/mans-coffee-cost/**
+
+- المنيو: https://anas1-tech.github.io/mans-coffee-cost/menu
+- عشان تنشر أي تعديل: `npm run deploy`. هالأمر يشغّل الاختبارات ويبني الموقع ويرفعه على فرع `gh-pages`.
+
+## قاعدة البيانات: Supabase (مرة وحدة)
 1. ادخل https://supabase.com/dashboard وسوّ **New project**.
 2. افتح **SQL Editor** والصق محتوى ملف `supabase/schema.sql` كامل، وبعدها **Run**.
 3. افتح **Authentication ← Users ← Add user ← Create new user**، واكتب إيميلك وكلمة المرور، وفعّل **Auto Confirm User**.
 4. افتح **Authentication ← Sign In / Providers** وطفّ **Allow new users to sign up** عشان ما أحد غيرك يسوي حساب.
-5. افتح **Project Settings ← API** وانسخ:
-   - **Project URL**
-   - **Publishable key** (أو **anon public** في المشاريع القديمة)
+5. افتح **Project Settings ← API** وانسخ **Project URL** و **Publishable key**، وحطهم في ملف `.env.production.local`:
+   ```
+   VITE_SUPABASE_URL=https://xxxx.supabase.co
+   VITE_SUPABASE_KEY=sb_publishable_xxxx
+   ```
+6. شغّل `npm run deploy`.
 
-### 2) Render (الاستضافة)
-1. ادخل https://dashboard.render.com واختر **New ← Blueprint**.
-2. اختر مستودع `mans-coffee-cost`. Render بيقرأ ملف `render.yaml` لحاله.
-3. بيطلب منك متغيرين:
-   - `VITE_SUPABASE_URL` = Project URL
-   - `VITE_SUPABASE_KEY` = Publishable key
-4. اضغط **Apply**، وبعد دقيقتين تقريباً الموقع يصير جاهز على رابط مثل `https://mans-coffee-cost.onrender.com`.
-
-الموقع **Static Site**، يعني مجاني وما ينام.
+قبل ما تربط Supabase، الموقع يشتغل في **وضع تجريبي** والبيانات تنحفظ في المتصفح بس.
 
 ## الملفات
 | المسار | وش فيه |

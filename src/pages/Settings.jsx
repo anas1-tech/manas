@@ -3,7 +3,7 @@ import { Download, Upload, FileSpreadsheet, Printer, LogOut, Smartphone, Tv, Cop
 import { useStore } from '../lib/store.jsx';
 import { isRemote, supabase } from '../lib/db.js';
 const xl = () => import('../lib/excel.js');
-import { Field, NumInput, Switch, Seg, Modal, Link, navigate } from '../components/ui.jsx';
+import { Field, NumInput, Switch, Seg, Modal, Link, navigate, href } from '../components/ui.jsx';
 
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
@@ -29,7 +29,7 @@ export default function Settings() {
   useEffect(() => setS(settings), [settings]);
   const set = (k) => (v) => setS((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(s) !== JSON.stringify(settings);
-  const menuUrl = `${location.origin}/menu`;
+  const menuUrl = location.origin + href('/menu');
 
   const onExcel = async (file) => {
     if (!file) return;
