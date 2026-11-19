@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2, BellRing, Check, Store } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { costPerBase, costPerPiece, effectivePackagePrice, materialBase, packageBaseQty, productsUsingMaterial, materialUsage } from '../lib/calc.js';
+import { costPerBase, costPerPiece, effectivePackagePrice, materialBase, packageBaseQty, productsUsingMaterial, materialUsage, makeCalc, suggestPrice } from '../lib/calc.js';
 import { UNITS, BASE_BIG, DENSITY_PRESETS } from '../lib/units.js';
-import { money, tiny, num, CUR } from '../lib/format.js';
-import { Field, NumInput, Switch, Sheet, Empty, Delta, useConfirm, navigate } from '../components/ui.jsx';
+import { money, tiny, num, pct, CUR } from '../lib/format.js';
+import { Field, NumInput, Switch, Sheet, Empty, Delta, Modal, MarginChip, useConfirm, navigate, Combo, ChipPicker } from '../components/ui.jsx';
 import { Sparkline } from '../components/charts.jsx';
 
-const PACKS = ['كرتون', 'كيس', 'علبة', 'جالون', 'ربطة', 'شدة', 'حبة'];
+const PACKS = ['كرتون', 'كيس', 'علبة', 'جالون', 'قارورة', 'صندوق', 'باكت', 'ربطة', 'شدة', 'سطل', 'شوال', 'حبة'];
 
 export const blankMaterial = () => ({
   id: crypto.randomUUID(), name: '', category: '', package_name: 'كرتون', package_price: '', price_includes_vat: true,
@@ -21,7 +21,8 @@ export function packText(m) {
 }
 
 export default function Materials() {
-  const { materials, products, history, settings, saveMaterial, deleteMaterial, loadSample } = useStore();
+  const { materials, products, history, settings, saveMaterial, deleteMaterial, loadSample, calc, saveRows } = useStore();
+  const [alert, setAlert] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [edit, setEdit] = useState(null);
@@ -95,13 +96,22 @@ export default function Materials() {
         ))
       )}
 
+      {alert && <PriceAlert {...alert} settings={settings} onClose={() => setAlert(null)} onApply={async (rows) => { setAlert(null); await saveRows('products', rows, `تحدّث سعر ${rows.length} منتج`); }} />}
       {edit && (
         <MaterialEditor
           key={edit.id}
           initial={edit}
           isNew={!materials.some((m) => m.id === edit.id)}
           onClose={() => setEdit(null)}
-          onSave={async (m) => { setEdit(null); await saveMaterial(m); }}
+          onSave={async (m) => {
+            setEdit(null);
+            // تنبيه: لو المنتجات اللي فيها المادة نزل ربحها تحت الهدف
+            const after = makeCalc(materials.map((x) => (x.id === m.id ? m : x)).concat(materials.some((x) => x.id === m.id) ? [] : [m]), products, settings);
+            const hit = productsUsingMaterial(m.id, products).filter((p) => !p.is_component).map((p) => ({ p, before: calc.product(p.id), after: after.product(p.id) }))
+              .filter(({ before, after: a }) => a.margin != null && before.margin != null && a.margin < before.margin - 0.0001 && a.status !== 'good');
+            await saveMaterial(m);
+            if (hit.length) setAlert({ m, hit });
+          }}
           onDelete={async (id) => { setEdit(null); await deleteMaterial(id); }}
           history={history.filter((h) => h.material_id === edit.id)}
           usedIn={productsUsingMaterial(edit.id, products)}
@@ -154,24 +164,20 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
         <Field label="اسم المادة"><input className="input" value={m.name} onChange={(e) => set('name')(e.target.value)} placeholder="مثال: حليب طازج" autoFocus={isNew} /></Field>
         <div className="grid g2">
           <Field label="التصنيف">
-            <input className="input" list="mat-cats" value={m.category} onChange={(e) => set('category')(e.target.value)} placeholder="ألبان، بن، تغليف..." />
-            <datalist id="mat-cats">{[...new Set([...cats, 'ألبان', 'بن', 'شاي وبهارات', 'تغليف', 'سكر ومحليات'])].map((c) => <option key={c} value={c} />)}</datalist>
+            <Combo value={m.category} onChange={set('category')} options={[...cats, 'ألبان', 'بن', 'شاي وبهارات', 'سكر ومحليات', 'سيرب ونكهات', 'مخبوزات', 'مكسرات', 'تغليف', 'منظفات', 'أخرى']} placeholder="اختر أو اكتب تصنيف" label="التصنيف" />
           </Field>
-          <Field label="المورد"><input className="input" value={m.supplier} onChange={(e) => set('supplier')(e.target.value)} placeholder="اختياري" /></Field>
+          <Field label="المورد"><Combo value={m.supplier || ''} onChange={set('supplier')} options={[...new Set(materials.map((x) => x.supplier).filter(Boolean))]} placeholder="اختياري" label="المورد" /></Field>
         </div>
       </div>
 
       <div className="panel grid">
         <h3>كيف تشتريها؟</h3>
-        <div className="grid g2">
-          <Field label="نوع العبوة">
-            <input className="input" list="packs" value={m.package_name} onChange={(e) => set('package_name')(e.target.value)} />
-            <datalist id="packs">{PACKS.map((p) => <option key={p} value={p} />)}</datalist>
-          </Field>
-          <Field label={`سعر ال${m.package_name || 'عبوة'} كامل`}><NumInput value={m.package_price} onChange={set('package_price')} suffix={CUR} /></Field>
-        </div>
+        <Field label="تشتريها كـ" group>
+          <ChipPicker value={m.package_name} onChange={set('package_name')} options={PACKS} />
+        </Field>
+        <Field label={`سعر ال${m.package_name || 'عبوة'} كامل`}><NumInput value={m.package_price} onChange={set('package_price')} suffix={CUR} /></Field>
         <Switch checked={m.price_includes_vat} onChange={set('price_includes_vat')} label="السعر شامل الضريبة" hint={vatNote} />
-        <Field label="المادة تنقاس بـ">
+        <Field label="المادة تنقاس بـ" group>
           <div className="seg" role="group">
             {[['pcs', 'العدد (حبة)'], ['g', 'الوزن (جرام)'], ['ml', 'السائل (مل)']].map(([k, l]) => (
               <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>
@@ -259,8 +265,100 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
         </div>
       )}
 
+      {!isNew && valid && <Suppliers m={m} onUse={(o) => setM((x) => ({ ...x, supplier: o.supplier, package_price: o.package_price, units_per_package: o.units_per_package, unit_size: o.unit_size, size_unit: o.size_unit, price_includes_vat: o.price_includes_vat }))} settings={settings} />}
+
       <Field label="ملاحظات"><textarea className="input" rows={2} value={m.notes || ''} onChange={(e) => set('notes')(e.target.value)} /></Field>
       {confirmUi}
     </Sheet>
+  );
+}
+
+/** مقارنة أسعار الموردين لنفس المادة */
+function Suppliers({ m, onUse, settings }) {
+  const { offers, saveRows, deleteRow } = useStore();
+  const [add, setAdd] = useState(null);
+  const base = materialBase(m);
+  const list = offers.filter((o) => o.material_id === m.id).map((o) => ({ ...o, per: costPerBase({ ...o, density: m.density }, settings) })).sort((a, b) => a.per - b.per);
+  const current = costPerBase(m, settings);
+  const show = (v) => (base === 'pcs' ? `${tiny(v)} ${CUR}/حبة` : `${money(v * 1000)} ${CUR}/${UNITS[BASE_BIG[base]].short}`);
+  const newOffer = () => setAdd({ id: crypto.randomUUID(), material_id: m.id, supplier: '', package_price: '', units_per_package: m.units_per_package, unit_size: m.unit_size, size_unit: m.size_unit, price_includes_vat: m.price_includes_vat, notes: '' });
+  return (
+    <div className="panel">
+      <div className="panel-head"><h3><Store size={18} style={{ verticalAlign: -3 }} /> أسعار الموردين</h3><button className="btn sm" onClick={newOffer}><Plus size={16} /> سعر مورد</button></div>
+      {!list.length ? <p className="muted small" style={{ margin: 0 }}>أضف أسعار الموردين الثانيين لنفس المادة، والموقع يقول لك مين الأرخص بعد ما يحسب حجم العبوة.</p> : (
+        <table className="table">
+          <tbody>
+            <tr><td>الحالي{m.supplier ? ` (${m.supplier})` : ''}</td><td className="muted small">{packText(m)}</td><td className="n num"><b>{show(current)}</b></td><td /></tr>
+            {list.map((o, i) => (
+              <tr key={o.id}>
+                <td>{o.supplier} {i === 0 && o.per < current && <span className="chip good">الأرخص · وفر <span className="num">{Math.round((1 - o.per / current) * 100)}%</span></span>}</td>
+                <td className="muted small">{packText(o)} بـ <span className="num">{money(Number(o.package_price))}</span></td>
+                <td className="n num">{show(o.per)}</td>
+                <td className="n" style={{ whiteSpace: 'nowrap' }}>
+                  <button className="btn sm" onClick={() => onUse(o)} title="اعتمد هذا السعر للمادة"><Check size={15} /> اعتمد</button>
+                  <button className="btn sm icon ghost" style={{ width: 32, minHeight: 32 }} aria-label="احذف" onClick={() => deleteRow('supplier_prices', o.id, 'انحذف')}><Trash2 size={15} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {add && (
+        <div className="grid" style={{ marginTop: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12 }}>
+          <div className="grid g2">
+            <Field label="المورد"><input className="input" value={add.supplier} onChange={(e) => setAdd({ ...add, supplier: e.target.value })} autoFocus /></Field>
+            <Field label={`سعر ال${m.package_name || 'عبوة'}`}><NumInput value={add.package_price} onChange={(v) => setAdd({ ...add, package_price: v })} suffix={CUR} /></Field>
+          </div>
+          <div className="grid g2">
+            <Field label="كم حبة داخلها"><NumInput value={add.units_per_package} onChange={(v) => setAdd({ ...add, units_per_package: v })} /></Field>
+            {base !== 'pcs' && (
+              <Field label="حجم الحبة">
+                <div className="row" style={{ flexWrap: 'nowrap' }}>
+                  <NumInput value={add.unit_size} onChange={(v) => setAdd({ ...add, unit_size: v })} />
+                  <select className="select input" style={{ width: 150 }} value={add.size_unit} onChange={(e) => setAdd({ ...add, size_unit: e.target.value })}>
+                    {Object.entries(UNITS).filter(([, u]) => u.base === base).map(([k, u]) => <option key={k} value={k}>{u.label}</option>)}
+                  </select>
+                </div>
+              </Field>
+            )}
+          </div>
+          <div className="row">
+            <button className="btn primary sm" disabled={!add.supplier.trim() || !(Number(add.package_price) > 0)} onClick={() => { saveRows('supplier_prices', [{ ...add, supplier: add.supplier.trim(), package_price: Number(add.package_price), units_per_package: Number(add.units_per_package) || 1, unit_size: Number(add.unit_size) || 1 }], 'انحفظ سعر المورد'); setAdd(null); }}>حفظ</button>
+            <button className="btn sm" onClick={() => setAdd(null)}>إلغاء</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** تنبيه بعد ما يغلى سعر مادة: المنتجات اللي نزل ربحها + تحديث السعر بضغطة */
+function PriceAlert({ m, hit, settings, onClose, onApply }) {
+  const rows = hit.map(({ p, before, after }) => ({ p, before, after, sug: suggestPrice(after.total, settings) }));
+  const [pick, setPick] = useState(() => new Set(rows.map((r) => r.p.id)));
+  return (
+    <Modal onClose={onClose}>
+      <div className="grid">
+        <h2><BellRing size={20} style={{ verticalAlign: -3, color: 'var(--warn)' }} /> سعر «{m.name}» أثّر على ربحك</h2>
+        <p className="muted small" style={{ margin: 0 }}>هالمنتجات صار ربحها تحت هدفك {settings.target_margin}%. اختر اللي تبي تحدّث سعره للسعر المقترح.</p>
+        <table className="table">
+          <thead><tr><th /><th>المنتج</th><th className="n">الهامش</th><th className="n">السعر</th></tr></thead>
+          <tbody>
+            {rows.map(({ p, before, after, sug }) => (
+              <tr key={p.id}>
+                <td><input type="checkbox" checked={pick.has(p.id)} onChange={(e) => { const n = new Set(pick); e.target.checked ? n.add(p.id) : n.delete(p.id); setPick(n); }} aria-label={p.name} /></td>
+                <td>{p.name} <span className="muted">{p.size}</span></td>
+                <td className="n"><span className="muted num">{pct(before.margin)}</span> ← <MarginChip margin={after.margin} status={after.status} /></td>
+                <td className="n num">{money(after.shelf)} ← <b>{money(sug.rounded)}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="row">
+          <button className="btn primary" disabled={!pick.size} onClick={() => onApply(rows.filter((r) => pick.has(r.p.id)).map(({ p, sug }) => ({ ...p, sell_price: settings.vat_registered && !p.price_includes_vat ? +sug.net.toFixed(2) : sug.rounded })))}>حدّث الأسعار المختارة</button>
+          <button className="btn" onClick={onClose}>خلّها مثل ما هي</button>
+        </div>
+      </div>
+    </Modal>
   );
 }

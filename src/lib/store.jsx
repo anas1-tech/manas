@@ -6,8 +6,11 @@ import { seedData } from './seed.js';
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
 
+const EMPTY = { settings: DEFAULT_SETTINGS, materials: [], products: [], history: [], expenses: [], sales: [], moves: [], offers: [], staff: [], role: 'admin', email: '' };
+const KEY = { materials: 'materials', products: 'products', price_history: 'history', expenses: 'expenses', sales: 'sales', stock_moves: 'moves', supplier_prices: 'offers', staff: 'staff' };
+
 export function StoreProvider({ children, enabled }) {
-  const [data, setData] = useState({ settings: DEFAULT_SETTINGS, materials: [], products: [], history: [] });
+  const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -16,13 +19,13 @@ export function StoreProvider({ children, enabled }) {
   const toast = useCallback((text, kind = 'ok') => {
     const id = Math.random();
     setToasts((t) => [...t, { id, text, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
   }, []);
 
   const reload = useCallback(async () => {
     try {
       const d = await db.loadAll();
-      setData(d);
+      setData({ ...EMPTY, ...d });
       setError(null);
     } catch (e) {
       setError(e.message || String(e));
@@ -39,7 +42,7 @@ export function StoreProvider({ children, enabled }) {
     const off = db.subscribe(() => {
       if (busy.current) return;
       clearTimeout(t);
-      t = setTimeout(reload, 400);
+      t = setTimeout(reload, 500);
     });
     return () => { off(); clearTimeout(t); };
   }, [enabled, reload]);
@@ -49,66 +52,83 @@ export function StoreProvider({ children, enabled }) {
     try {
       await fn();
       if (okText) toast(okText);
+      return true;
     } catch (e) {
       toast(`ما انحفظ: ${e.message || e}`, 'err');
       await reload();
+      return false;
     } finally {
-      setTimeout(() => { busy.current--; }, 800);
+      setTimeout(() => { busy.current--; }, 900);
     }
   }, [reload, toast]);
 
-  const actions = useMemo(() => ({
-    async saveMaterial(m) {
-      const prev = data.materials.find((x) => x.id === m.id);
-      const hist = !prev || Number(prev.package_price) !== Number(m.package_price)
-        ? { id: crypto.randomUUID(), material_id: m.id, package_price: Number(m.package_price), recorded_at: new Date().toISOString() }
-        : null;
-      setData((d) => ({
-        ...d,
-        materials: prev ? d.materials.map((x) => (x.id === m.id ? m : x)) : [...d.materials, m],
-        history: hist ? [...d.history, hist] : d.history,
-      }));
-      await run(async () => {
-        await db.upsert('materials', m);
-        if (hist) await db.upsert('price_history', hist);
-      }, 'انحفظت المادة');
-    },
-    async deleteMaterial(id) {
-      setData((d) => ({ ...d, materials: d.materials.filter((x) => x.id !== id), history: d.history.filter((h) => h.material_id !== id) }));
-      await run(() => db.remove('materials', id), 'انحذفت المادة');
-    },
-    async saveProduct(p) {
-      setData((d) => ({
-        ...d,
-        products: d.products.some((x) => x.id === p.id) ? d.products.map((x) => (x.id === p.id ? p : x)) : [...d.products, p],
-      }));
-      await run(() => db.upsert('products', p), 'انحفظ المنتج');
-    },
-    async deleteProduct(id) {
-      setData((d) => ({ ...d, products: d.products.filter((x) => x.id !== id) }));
-      await run(() => db.remove('products', id), 'انحذف المنتج');
-    },
-    async saveSettings(s) {
-      setData((d) => ({ ...d, settings: { ...d.settings, ...s } }));
-      await run(() => db.saveSettings({ ...data.settings, ...s }), 'انحفظت الإعدادات');
-    },
-    /** استيراد دفعة وحدة (من Excel أو نسخة احتياطية) */
-    async importBatch({ materials = [], products = [], history = [] }, okText = 'تم الاستيراد') {
-      await run(async () => {
-        await db.upsert('materials', materials);
-        await db.upsert('price_history', history);
-        await db.upsert('products', products);
-      }, okText);
-      await reload();
-    },
-    async loadSample() {
-      await actions.importBatch(seedData(), 'انضافت البيانات التجريبية');
-    },
-  }), [data, run, reload]);
+  const actions = useMemo(() => {
+    const idOf = (table) => (table === 'staff' ? 'email' : 'id');
+    const localUpsert = (table, rows) => setData((d) => {
+      const k = KEY[table];
+      const id = idOf(table);
+      const arr = [...d[k]];
+      for (const r of rows) {
+        const i = arr.findIndex((x) => x[id] === r[id]);
+        if (i >= 0) arr[i] = r; else arr.push(r);
+      }
+      return { ...d, [k]: arr };
+    });
+    const localRemove = (table, idv) => setData((d) => ({ ...d, [KEY[table]]: d[KEY[table]].filter((x) => x[idOf(table)] !== idv) }));
 
-  const calc = useMemo(() => makeCalc(data.materials, data.products, data.settings), [data]);
+    const a = {
+      async saveRows(table, rows, okText) {
+        const list = Array.isArray(rows) ? rows : [rows];
+        localUpsert(table, list);
+        return run(() => db.upsert(table, list), okText);
+      },
+      async deleteRow(table, idv, okText) {
+        localRemove(table, idv);
+        return run(() => db.remove(table, idv, idOf(table)), okText);
+      },
+      async saveMaterial(m) {
+        const prev = data.materials.find((x) => x.id === m.id);
+        const hist = !prev || Number(prev.package_price) !== Number(m.package_price)
+          ? { id: crypto.randomUUID(), material_id: m.id, package_price: Number(m.package_price), recorded_at: new Date().toISOString() }
+          : null;
+        localUpsert('materials', [m]);
+        if (hist) localUpsert('price_history', [hist]);
+        return run(async () => {
+          await db.upsert('materials', m);
+          if (hist) await db.upsert('price_history', hist);
+        }, 'انحفظت المادة');
+      },
+      async deleteMaterial(id) {
+        setData((d) => ({ ...d, materials: d.materials.filter((x) => x.id !== id), history: d.history.filter((h) => h.material_id !== id), moves: d.moves.filter((h) => h.material_id !== id), offers: d.offers.filter((h) => h.material_id !== id) }));
+        return run(() => db.remove('materials', id), 'انحذفت المادة');
+      },
+      saveProduct: (p) => a.saveRows('products', [p], 'انحفظ المنتج'),
+      deleteProduct: (id) => a.deleteRow('products', id, 'انحذف المنتج'),
+      async saveSettings(s) {
+        setData((d) => ({ ...d, settings: { ...d.settings, ...s } }));
+        return run(() => db.saveSettings({ ...data.settings, ...s }), 'انحفظت الإعدادات');
+      },
+      /** استيراد دفعة وحدة (من Excel أو نسخة احتياطية) */
+      async importBatch({ materials = [], products = [], history = [] }, okText = 'تم الاستيراد') {
+        await run(async () => {
+          await db.upsert('materials', materials);
+          await db.upsert('price_history', history);
+          await db.upsert('products', products);
+        }, okText);
+        await reload();
+      },
+      async loadSample() {
+        await a.importBatch(seedData(), 'انضافت البيانات التجريبية');
+      },
+      uploadImage: (file) => db.uploadImage(file),
+    };
+    return a;
+  }, [data, run, reload]);
 
-  const value = { ...data, calc, loading, error, reload, toast, toasts, ...actions };
+  const calc = useMemo(() => makeCalc(data.materials, data.products, data.settings), [data.materials, data.products, data.settings]);
+  const isAdmin = data.role === 'admin';
+
+  const value = { ...data, calc, isAdmin, loading, error, reload, toast, toasts, ...actions };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

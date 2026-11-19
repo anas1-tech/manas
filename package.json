@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.460.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
@@ -21,5 +22,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.11"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

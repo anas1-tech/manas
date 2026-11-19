@@ -75,3 +75,30 @@ test('كم كوب يطلع من الكرتون (مع الخلطة)', async () =>
   assert.equal(use, 100); // 200 مل خلطة = 100 مل حليب
   assert.equal(packageBaseQty(milk) / use, 120); // 12 لتر ÷ 100 مل
 });
+
+test('المخزون: الاستلام ناقص المبيعات من بعد أول جرد', async () => {
+  const { stockLevels } = await import('./calc.js');
+  const karak = { id: 'k', items: [{ type: 'material', id: 'm1', qty: 200, unit: 'ml' }] };
+  const moves = [{ material_id: 'm1', qty_base: 12000, created_at: '2026-11-10T08:00:00Z' }];
+  const sales = [
+    { product_id: 'k', qty: 5, sale_date: '2026-11-09' }, // قبل الجرد: ما تنحسب
+    { product_id: 'k', qty: 10, sale_date: '2026-11-12' },
+  ];
+  const { level } = stockLevels([milk], [karak], moves, sales);
+  assert.equal(level.get('m1'), 12000 - 2000);
+});
+
+test('نقطة التعادل والمصاريف', async () => {
+  const { monthlyFixed, breakEven } = await import('./calc.js');
+  const s = { ...S, working_days: 30 };
+  const fixed = monthlyFixed([{ amount: 3000, period: 'month' }, { amount: 12000, period: 'year' }, { amount: 50, period: 'day' }], s);
+  assert.equal(fixed, 3000 + 1000 + 1500);
+  assert.equal(Math.round(breakEven(fixed, 2, s).perDay), 92); // 5500 ÷ 2 ÷ 30
+});
+
+test('العرض: مجموع أسعار المنتجات منفردة', () => {
+  const a = { id: 'a', sell_price: 5, items: [] };
+  const b = { id: 'b', sell_price: 7, items: [] };
+  const combo = { id: 'c', kind: 'combo', sell_price: 10, items: [{ type: 'product', id: 'a', qty: 1, unit: 'pcs' }, { type: 'product', id: 'b', qty: 1, unit: 'pcs' }] };
+  assert.equal(makeCalc([], [a, b, combo], S).product('c').itemsShelf, 12);
+});

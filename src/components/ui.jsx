@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { X, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Minus, CircleCheck, CircleAlert, OctagonAlert } from 'lucide-react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ChevronDown, X, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Minus, CircleCheck, CircleAlert, OctagonAlert } from 'lucide-react';
 import { STATUS, pct } from '../lib/format.js';
 
 // ───────── التنقل ─────────
@@ -31,13 +31,15 @@ export function Logo({ className = 'brand-mark' }) {
   );
 }
 
-export function Field({ label, hint, children, className = '' }) {
+/** group: للأزرار والاختيارات (مو حقل كتابة) عشان ما ينربط العنوان بأول زر */
+export function Field({ label, hint, children, className = '', group = false }) {
+  const Tag = group ? 'div' : 'label';
   return (
-    <label className={`field ${className}`}>
+    <Tag className={`field ${className}`} {...(group ? { role: 'group', 'aria-label': label } : {})}>
       <span>{label}</span>
       {children}
       {hint && <small>{hint}</small>}
-    </label>
+    </Tag>
   );
 }
 
@@ -179,6 +181,68 @@ export function Empty({ title, children, action }) {
       <h3>{title}</h3>
       <p>{children}</p>
       {action}
+    </div>
+  );
+}
+
+/**
+ * قائمة منسدلة تقبل كتابة قيمة جديدة: تعرض كل الخيارات لما تفتحها،
+ * وتفلتر لما تكتب. بديل datalist اللي ما يبين كل الخيارات.
+ */
+export function Combo({ value, onChange, options, placeholder, autoFocus, label, dir }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState(false);
+  const [active, setActive] = useState(-1);
+  const ref = useRef(null);
+  const uniq = [...new Set(options.filter(Boolean))];
+  const list = typed && value ? uniq.filter((o) => o.includes(value.trim())) : uniq;
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
+  }, [open]);
+  const choose = (o) => { onChange(o); setOpen(false); setTyped(false); setActive(-1); };
+  return (
+    <div className="combo" ref={ref}>
+      <input
+        className="input" value={value ?? ''} placeholder={placeholder} autoFocus={autoFocus} dir={dir}
+        role="combobox" aria-expanded={open} aria-autocomplete="list" aria-label={label}
+        onChange={(e) => { onChange(e.target.value); setTyped(true); setOpen(true); setActive(-1); }}
+        onFocus={() => { setTyped(false); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((i) => Math.min(i + 1, list.length - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+          else if (e.key === 'Enter' && open && active >= 0) { e.preventDefault(); choose(list[active]); }
+          else if (e.key === 'Escape' || e.key === 'Tab') setOpen(false);
+        }}
+      />
+      <button type="button" className="combo-btn" tabIndex={-1} aria-label="عرض الخيارات" onClick={() => { setTyped(false); setOpen((o) => !o); }}><ChevronDown size={18} /></button>
+      {open && list.length > 0 && (
+        <ul className="combo-list" role="listbox">
+          {list.map((o, i) => (
+            <li key={o} role="option" aria-selected={o === value} className={i === active ? 'active' : ''}
+              onPointerDown={(e) => { e.preventDefault(); choose(o); }}>{o}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** اختيار من أزرار مع خيار «أخرى» تكتبه بنفسك */
+export function ChipPicker({ value, onChange, options, otherLabel = 'أخرى…' }) {
+  const isOther = value && !options.includes(value);
+  const [other, setOther] = useState(isOther);
+  return (
+    <div className="grid" style={{ gap: 8 }}>
+      <div className="chips">
+        {options.map((o) => (
+          <button type="button" key={o} className="filter-chip" aria-pressed={!other && value === o} onClick={() => { setOther(false); onChange(o); }}>{o}</button>
+        ))}
+        <button type="button" className="filter-chip" aria-pressed={other} onClick={() => { setOther(true); if (options.includes(value)) onChange(''); }}>{otherLabel}</button>
+      </div>
+      {other && <input className="input" value={value} onChange={(e) => onChange(e.target.value)} placeholder="اكتب نوع العبوة" autoFocus />}
     </div>
   );
 }

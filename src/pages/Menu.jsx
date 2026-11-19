@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Maximize, Sun, Moon, ArrowRight } from 'lucide-react';
+import { Maximize, Sun, Moon, ArrowRight, Image as ImageIcon, Languages } from 'lucide-react';
 import { db } from '../lib/db.js';
 import { Logo, navigate } from '../components/ui.jsx';
 import { money } from '../lib/format.js';
@@ -8,7 +8,18 @@ import { money } from '../lib/format.js';
 export default function Menu() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [light, setLight] = useState(() => new URLSearchParams(location.search).get('theme') === 'light');
+  const params = new URLSearchParams(location.search);
+  const [light, setLight] = useState(params.get('theme') === 'light');
+  const [lang, setLang] = useState(params.get('lang') || '');
+  const [photos, setPhotos] = useState(params.get('photos') === '1');
+  // نحفظ الاختيارات في الرابط عشان شاشة المحل تفتح على نفس الشكل
+  useEffect(() => {
+    const u = new URLSearchParams();
+    if (light) u.set('theme', 'light');
+    if (lang) u.set('lang', lang);
+    if (photos) u.set('photos', '1');
+    history.replaceState(null, '', location.pathname + (u.toString() ? `?${u}` : ''));
+  }, [light, lang, photos]);
 
   useEffect(() => {
     let alive = true;
@@ -29,19 +40,28 @@ export default function Menu() {
     const c = it.category || 'المشروبات';
     if (!cats.has(c)) cats.set(c, new Map());
     const byName = cats.get(c);
-    if (!byName.has(it.name)) byName.set(it.name, { name: it.name, description: it.description, sizes: new Map() });
+    if (!byName.has(it.name)) byName.set(it.name, { name: it.name, description: it.description, name_en: it.name_en, description_en: it.description_en, image: it.image_url, sizes: new Map() });
     const row = byName.get(it.name);
+    if (!row.image && it.image_url) row.image = it.image_url;
+    if (!row.name_en && it.name_en) row.name_en = it.name_en;
     row.sizes.set(it.size || '', it.shelf_price);
     if (!sizeRank.has(it.size || '')) sizeRank.set(it.size || '', sizeRank.size);
     if (!row.description && it.description) row.description = it.description;
   }
 
+  const L = lang || data.shop.menu_lang || 'ar';
+  const title = (r) => (L === 'en' && r.name_en ? r.name_en : r.name);
+  const sub = (r) => (L === 'both' && r.name_en ? r.name_en : L === 'en' ? r.description_en || '' : r.description || '');
+  const anyPhotos = data.items.some((i) => i.image_url);
+
   return (
-    <div className={`menu-page${light ? ' light' : ''}`}>
+    <div className={`menu-page${light ? ' light' : ''}${photos ? ' photos' : ''}`} dir={L === 'en' ? 'ltr' : 'rtl'}>
       <div className="menu-tools">
         <button className="btn sm" onClick={() => navigate('/')}><ArrowRight size={16} /> رجوع</button>
         <button className="btn sm" onClick={() => document.documentElement.requestFullscreen?.()}><Maximize size={16} /> ملء الشاشة</button>
         <button className="btn sm" onClick={() => setLight((v) => !v)}>{light ? <Moon size={16} /> : <Sun size={16} />} {light ? 'داكن' : 'فاتح'}</button>
+        <button className="btn sm" onClick={() => setLang({ ar: 'both', both: 'en', en: 'ar' }[L])}><Languages size={16} /> {{ ar: 'عربي', both: 'عربي + EN', en: 'English' }[L]}</button>
+        {anyPhotos && <button className="btn sm" onClick={() => setPhotos((v) => !v)}><ImageIcon size={16} /> {photos ? 'بدون صور' : 'بالصور'}</button>}
       </div>
       <header className="menu-top">
         <h1>{data.shop.shop_name || 'المنيو'}</h1>
@@ -66,8 +86,11 @@ export default function Menu() {
                     return (
                       <div className="menu-row" key={r.name}>
                         <span className="menu-name">
-                          <span>{r.name}{only && !inCols && only[0] && <em className="menu-size">{only[0]}</em>}</span>
-                          {r.description && <small>{r.description}</small>}
+                          {photos && (r.image ? <img className="menu-img" src={r.image} alt="" loading="lazy" /> : <span className="menu-img" />)}
+                          <span className="menu-name-text">
+                            <span>{title(r)}{only && !inCols && only[0] && <em className="menu-size">{only[0]}</em>}</span>
+                            {sub(r) && <small dir={L === 'both' ? 'ltr' : undefined}>{sub(r)}</small>}
+                          </span>
                         </span>
                         {only && !inCols ? (
                           <>{n > 1 && <span style={{ gridColumn: `span ${n - 1}` }} />}<span className="menu-price">{fmt(only[1])}</span></>
@@ -85,7 +108,7 @@ export default function Menu() {
       )}
       <footer className="menu-foot">
         <span>{data.shop.menu_note}</span>
-        <span>الأسعار بالريال{data.shop.vat_registered ? ' وشاملة الضريبة' : ''}</span>
+        <span>{L === 'en' ? `Prices in SAR${data.shop.vat_registered ? ', VAT included' : ''}` : `الأسعار بالريال${data.shop.vat_registered ? ' وشاملة الضريبة' : ''}`}</span>
       </footer>
     </div>
   );

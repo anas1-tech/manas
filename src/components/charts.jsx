@@ -119,3 +119,52 @@ export function Sparkline({ points }) {
 }
 
 export const unitCostText = (cost, base) => `${tiny(cost)} ${CUR} / ${UNITS[base].short}`;
+
+/**
+ * أعمدة يومية (سلسلة وحدة) مع خط مرجعي اختياري (مثل نقطة التعادل) وتلميح عند المرور.
+ * days: [{ date, value, sub }]
+ */
+export function DailyBars({ days, target, targetLabel, valueLabel = 'الربح' }) {
+  const [hi, setHi] = useState(null);
+  if (!days.length) return null;
+  const W = 600, H = 180, padB = 22, padT = 10;
+  const max = Math.max(target || 0, ...days.map((d) => d.value), 1);
+  const min = Math.min(0, ...days.map((d) => d.value));
+  const y = (v) => padT + (1 - (v - min) / (max - min)) * (H - padT - padB);
+  const bw = W / days.length;
+  const step = Math.ceil(days.length / 8);
+  const h = hi != null ? days[hi] : null;
+  return (
+    <div className="spark-wrap" onMouseLeave={() => setHi(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }} role="img" aria-label={`${valueLabel} لكل يوم`}>
+        <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--line)" />
+        {days.map((d, i) => {
+          const top = y(Math.max(d.value, 0)), bot = y(Math.min(d.value, 0));
+          return (
+            <g key={d.date} onMouseEnter={() => setHi(i)} onClick={() => setHi(i)}>
+              <rect x={i * bw} y={0} width={bw} height={H} fill="transparent" />
+              {d.value !== 0 && <rect x={i * bw + bw * 0.18} y={top} width={bw * 0.64} height={Math.max(bot - top, 1)} rx="3" fill={d.value < 0 ? 'var(--bad)' : 'var(--brand)'} opacity={hi == null || hi === i ? 1 : 0.45} />}
+              {(i % step === 0 || (i === days.length - 1 && (days.length - 1) % step >= step / 2)) && (
+                <text x={i * bw + bw / 2} y={H - 4} textAnchor="middle" fontSize="11" fill="var(--ink-3)">{d.date.slice(8)}/{d.date.slice(5, 7)}</text>
+              )}
+            </g>
+          );
+        })}
+        {target > 0 && (
+          <>
+            <line x1="0" x2={W} y1={y(target)} y2={y(target)} stroke="var(--saffron)" strokeWidth="1.5" strokeDasharray="5 4" />
+          </>
+        )}
+      </svg>
+      <div className="legend">
+        <span><i style={{ background: 'var(--brand)' }} />{valueLabel} اليومي</span>
+        {target > 0 && <span><i style={{ background: 'none', borderTop: '2px dashed var(--saffron)', borderRadius: 0, height: 0, verticalAlign: 3 }} />{targetLabel}</span>}
+      </div>
+      {h && (
+        <div className="tip" style={{ left: `${((hi + 0.5) * bw / W) * 100}%`, top: `${(y(Math.max(h.value, 0)) / H) * 100}%` }}>
+          {date(h.date)} · {valueLabel} <span className="num">{money(h.value)}</span>{h.sub ? ` · ${h.sub}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}

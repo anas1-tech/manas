@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react';
-import { CircleCheck, CircleAlert, OctagonAlert, Tv } from 'lucide-react';
+import { CircleCheck, CircleAlert, OctagonAlert, Tv, Boxes } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
+import { salesSummary, monthlyFixed, avgUnitProfit, breakEven } from '../lib/calc.js';
+import { useStock, StockChip, fmtLevel } from './Inventory.jsx';
+import { today } from './Sales.jsx';
+import { num } from '../lib/format.js';
 import { money, pct, CUR, date } from '../lib/format.js';
 import { Empty, Delta, Link, navigate } from '../components/ui.jsx';
 
 const ICON = { good: CircleCheck, warn: CircleAlert, bad: OctagonAlert };
 
 export default function Dashboard() {
-  const { products, materials, history, settings, calc, loadSample } = useStore();
+  const { products, materials, history, settings, calc, loadSample, sales, expenses } = useStore();
+  const { info } = useStock();
   const [sort, setSort] = useState('margin');
 
   const sellable = useMemo(() => products.filter((p) => !p.is_component).map((p) => calc.product(p.id)).filter(Boolean), [products, calc]);
@@ -85,6 +90,17 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <Business sales={sales} expenses={expenses} calc={calc} products={products} settings={settings} />
+      {(() => {
+        const low = materials.filter((m) => ['out', 'low'].includes(info.get(m.id)?.status));
+        return low.length > 0 && (
+          <section className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head"><h2><Boxes size={20} style={{ verticalAlign: -3 }} /> مواد قربت تخلص</h2><Link to="/inventory" className="btn sm">المخزون</Link></div>
+            <div className="chips">{low.map((m) => <span key={m.id} className="chip" style={{ gap: 6 }}><StockChip status={info.get(m.id).status} /> {m.name} <span className="num muted">{fmtLevel(m, info.get(m.id).level)}</span></span>)}</div>
+          </section>
+        );
+      })()}
+
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }} data-stack>
         <section className="panel">
           <div className="panel-head">
@@ -143,5 +159,34 @@ export default function Dashboard() {
       </div>
       <style>{`@media (max-width: 899px){ [data-stack]{ grid-template-columns: 1fr !important; } }`}</style>
     </>
+  );
+}
+
+function Business({ sales, expenses, calc, products, settings }) {
+  const t = today();
+  const day = salesSummary(sales, calc, t, t);
+  const month = salesSummary(sales, calc, t.slice(0, 8) + '01', t);
+  const fixed = monthlyFixed(expenses, settings);
+  const be = breakEven(fixed, avgUnitProfit(calc, products, sales).value, settings);
+  if (!sales.length && !fixed) {
+    return (
+      <div className="banner" style={{ background: 'var(--brand-2)' }}>
+        <CircleCheck />سجّل مبيعاتك من صفحة <Link to="/sales">المبيعات</Link> وأضف <Link to="/expenses">المصاريف</Link>، وتطلع لك هنا أرباحك الفعلية وكم باقي لك عشان تغطي المصاريف.
+      </div>
+    );
+  }
+  const prog = be ? Math.min(month.qty / be.perMonth, 1) : 0;
+  return (
+    <div className="stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', marginBottom: 16 }}>
+      <div className="stat"><span>مبيعات اليوم</span><b className="num">{money(day.revenue)}</b><small>ربح <span className="num">{money(day.profit)}</span> · <span className="num">{num(day.qty, 0)}</span> حبة</small></div>
+      <div className="stat"><span>ربح هالشهر</span><b className="num" style={{ color: 'var(--good)' }}>{money(month.profit)}</b><small>من مبيعات <span className="num">{money(month.revenue)}</span></small></div>
+      <div className="stat"><span>بعد المصاريف</span><b className="num" style={{ color: month.profit - (fixed * 12 / 365) * Number(t.slice(8)) >= 0 ? 'var(--good)' : 'var(--bad)' }}>{fixed ? money(month.profit - (fixed * 12 / 365) * Number(t.slice(8))) : '—'}</b><small>{fixed ? 'من أول الشهر لليوم' : <Link to="/expenses">أضف المصاريف</Link>}</small></div>
+      <div className="stat">
+        <span>نقطة التعادل</span>
+        <b className="num">{be ? `${num(month.qty, 0)} / ${num(Math.ceil(be.perMonth), 0)}` : '—'}</b>
+        {be && <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 99, margin: '6px 0 2px', overflow: 'hidden' }}><div style={{ width: `${prog * 100}%`, height: '100%', background: prog >= 1 ? 'var(--good)' : 'var(--saffron)' }} /></div>}
+        <small>{be ? `تحتاج ${num(Math.ceil(be.perDay), 0)} حبة باليوم` : 'تحتاج مصاريف ووصفات'}</small>
+      </div>
+    </div>
   );
 }

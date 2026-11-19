@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Check } from 'lucide-react';
+import { useRecordSales, today } from './Sales.jsx';
 import { useStore } from '../lib/store.jsx';
 import { makeCalc, productsUsingMaterial, suggestPrice } from '../lib/calc.js';
 import { money, pct, CUR } from '../lib/format.js';
 import { Seg, Field, Empty, MarginChip } from '../components/ui.jsx';
 
 export default function Calculator() {
-  const initial = new URLSearchParams(location.search).get('tab') === 'whatif' ? 'whatif' : 'order';
+  const { isAdmin } = useStore();
+  const initial = isAdmin && new URLSearchParams(location.search).get('tab') === 'whatif' ? 'whatif' : 'order';
   const [tab, setTab] = useState(initial);
   return (
     <>
@@ -15,7 +17,7 @@ export default function Calculator() {
           <h1>الحاسبة</h1>
           <p>{tab === 'order' ? 'احسب تكلفة وربح طلب كامل أو مبيعات يوم.' : 'شوف وش يصير لأرباحك لو غلى سعر مادة.'}</p>
         </div>
-        <Seg value={tab} onChange={setTab} label="نوع الحاسبة" options={[['order', 'حاسبة طلب'], ['whatif', 'لو تغير السعر']]} />
+        {isAdmin && <Seg value={tab} onChange={setTab} label="نوع الحاسبة" options={[['order', 'حاسبة طلب'], ['whatif', 'لو تغير السعر']]} />}
       </div>
       {tab === 'order' ? <OrderCalc /> : <WhatIf />}
     </>
@@ -23,8 +25,9 @@ export default function Calculator() {
 }
 
 function OrderCalc() {
-  const { products, calc, settings } = useStore();
+  const { products, calc, settings, isAdmin } = useStore();
   const [counts, setCounts] = useState({});
+  const record = useRecordSales();
   const sellable = products.filter((p) => !p.is_component && Number(p.sell_price) > 0);
   const inc = (id, d) => setCounts((c) => ({ ...c, [id]: Math.max(0, (c[id] || 0) + d) }));
   const lines = sellable.filter((p) => counts[p.id]).map((p) => ({ p, n: counts[p.id], c: calc.product(p.id) }));
@@ -43,7 +46,7 @@ function OrderCalc() {
           return (
             <div className="item" key={p.id} style={{ cursor: 'default' }}>
               <span className="item-title">{p.name} {p.size && <span className="size-tag">{p.size}</span>}</span>
-              <span className="item-sub"><span className="num">{money(c.shelf)}</span> {CUR} · ربح <span className="num">{money(c.profit)}</span></span>
+              <span className="item-sub"><span className="num">{money(c.shelf)}</span> {CUR}{isAdmin && !c.noRecipe && <> · ربح <span className="num">{money(c.profit)}</span></>}</span>
               <span className="item-end">
                 <span className="counter">
                   <button onClick={() => inc(p.id, -1)} aria-label={`نقّص ${p.name}`}>−</button>
@@ -68,9 +71,10 @@ function OrderCalc() {
             </table>
             <div className="receipt-total"><span>المجموع</span><b className="num">{money(tot.shelf)} {CUR}</b></div>
             {settings.vat_registered && <div className="receipt-total"><span className="muted">منها ضريبة</span><span className="num">{money(tot.vat)}</span></div>}
-            <div className="receipt-total"><span className="muted">التكلفة</span><span className="num">{money(tot.cost)}</span></div>
-            <div className="receipt-total final"><span>صافي الربح</span><b className="num">{money(profit)} {CUR}</b></div>
-            <p className="muted small" style={{ margin: 0 }}>هامش <span className="num">{pct(tot.net ? profit / tot.net : null)}</span> من الإيراد{settings.vat_registered ? ' بدون ضريبة' : ''}.</p>
+            {isAdmin && <div className="receipt-total"><span className="muted">التكلفة</span><span className="num">{money(tot.cost)}</span></div>}
+            {isAdmin && <div className="receipt-total final"><span>صافي الربح</span><b className="num">{money(profit)} {CUR}</b></div>}
+            {isAdmin && <p className="muted small" style={{ margin: 0 }}>هامش <span className="num">{pct(tot.net ? profit / tot.net : null)}</span> من الإيراد{settings.vat_registered ? ' بدون ضريبة' : ''}.</p>}
+            <button className="btn primary" style={{ width: '100%', marginTop: 12 }} onClick={async () => { if (await record(counts, today())) setCounts({}); }}><Check /> سجّلها كمبيعات اليوم</button>
           </>
         )}
       </div>

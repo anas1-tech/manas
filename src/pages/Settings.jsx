@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Upload, FileSpreadsheet, Printer, LogOut, Smartphone, Tv, Copy, Database, Save } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, Printer, LogOut, Smartphone, Tv, Copy, Database, Save, QrCode, Users, Trash2, UserPlus } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { isRemote, supabase } from '../lib/db.js';
 const xl = () => import('../lib/excel.js');
@@ -69,6 +69,9 @@ export default function Settings() {
             <h2>المحل</h2>
             <Field label="اسم المحل"><input className="input" value={s.shop_name} onChange={(e) => set('shop_name')(e.target.value)} /></Field>
             <Field label="سطر أسفل المنيو" hint="مثال: ساعات العمل أو رقم الطلبات"><input className="input" value={s.menu_note || ''} onChange={(e) => set('menu_note')(e.target.value)} /></Field>
+            <Field label="لغة المنيو الافتراضية" group>
+              <Seg value={s.menu_lang || 'ar'} onChange={set('menu_lang')} label="لغة المنيو" options={[['ar', 'عربي'], ['both', 'عربي + إنجليزي'], ['en', 'English']]} />
+            </Field>
           </section>
 
           <section className="panel grid">
@@ -117,8 +120,11 @@ export default function Settings() {
             <div className="row">
               <Link to="/menu" className="btn" target="_blank"><Tv /> افتح المنيو</Link>
               <button className="btn" onClick={() => { navigator.clipboard?.writeText(menuUrl); toast('انسخ الرابط'); }}><Copy /> انسخ الرابط</button>
+              <button className="btn" onClick={() => navigate('/qr')}><QrCode /> رمز QR</button>
             </div>
           </section>
+
+          <StaffSection />
 
           <section className="panel grid">
             <h2>الجهاز والبيانات</h2>
@@ -169,5 +175,50 @@ function ImportPreview({ preview, onClose, onApply }) {
         <button className="btn primary" disabled={nothing} onClick={onApply}>استورد</button>
       </div>
     </Modal>
+  );
+}
+
+/** الموظفين: المدير يشوف كل شي، الموظف يسجل مبيعات ويشوف المنيو والحاسبة */
+function StaffSection() {
+  const { staff, saveRows, deleteRow, email: me } = useStore();
+  const [name, setName] = useState('');
+  const [user, setUser] = useState('');
+  const [role, setRole] = useState('staff');
+  const toEmail = (u) => (u.includes('@') ? u.trim().toLowerCase() : `${u.trim().toLowerCase()}@example.com`);
+  const shown = (e) => e.replace(/@example\.com$/, '');
+  return (
+    <section className="panel grid">
+      <h2><Users size={20} style={{ verticalAlign: -3 }} /> الموظفين</h2>
+      <p className="muted small" style={{ margin: 0 }}>
+        <b>الموظف</b> يسجل المبيعات ويشوف الأسعار والمنيو بس، بدون التكاليف والأرباح. <b>المدير</b> يشوف كل شي.
+        <br />لإضافة موظف: سوّ له دخول في Supabase ← Authentication ← Add user بإيميل مثل <span dir="ltr">ali@example.com</span>، وبعدها أضفه هنا باسم المستخدم <span dir="ltr">ali</span>.
+      </p>
+      {staff.length > 0 && (
+        <table className="table">
+          <tbody>
+            {staff.map((x) => (
+              <tr key={x.email}>
+                <td>{x.name || '—'}</td>
+                <td dir="ltr" style={{ textAlign: 'right' }}>{shown(x.email)}</td>
+                <td>
+                  <select className="select input" style={{ minHeight: 34, padding: '4px 8px' }} value={x.role} disabled={x.email === me} onChange={(e) => saveRows('staff', [{ ...x, role: e.target.value }], 'تحدّثت الصلاحية')}>
+                    <option value="admin">مدير</option><option value="staff">موظف</option>
+                  </select>
+                </td>
+                <td style={{ width: 36 }}>{x.email !== me && <button className="btn icon ghost" style={{ width: 32, minHeight: 32 }} aria-label="شيل" onClick={() => deleteRow('staff', x.email, 'انشال')}><Trash2 size={15} /></button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="grid g2">
+        <Field label="الاسم"><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="اسم المستخدم أو الإيميل"><input className="input" dir="ltr" value={user} onChange={(e) => setUser(e.target.value)} /></Field>
+      </div>
+      <div className="row">
+        <Seg value={role} onChange={setRole} label="الصلاحية" options={[['staff', 'موظف'], ['admin', 'مدير']]} />
+        <button className="btn" disabled={!user.trim()} onClick={() => { saveRows('staff', [{ email: toEmail(user), name: name.trim(), role }], 'انضاف'); setName(''); setUser(''); }}><UserPlus size={16} /> أضف</button>
+      </div>
+    </section>
   );
 }
