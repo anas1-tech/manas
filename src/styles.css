@@ -454,3 +454,10 @@ select option, select optgroup { background: var(--surface); color: var(--ink); 
 .sel-opt.active { background: var(--surface-2); }
 .sel-opt[aria-selected='true'] { color: var(--brand); font-weight: 600; }
 .sel-opt[aria-selected='true']::after { content: '✓'; margin-inline-start: auto; font-size: 13px; }
+
+/* إدارة المنيو + منع التمرير الجانبي في الجوال */
+.main { min-width: 0; }
+@media (max-width: 600px) {
+  .menu-admin-row { grid-template-columns: 1fr; }
+  .menu-admin-row .item-end { grid-row: auto; grid-column: 1; justify-items: start; margin-top: 6px; }
+}

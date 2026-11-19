@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, CupSoda, Package, Calculator as CalcIcon, Settings as Gear, Tv, Info, Copy, Receipt, Boxes, Wallet, LayoutGrid, QrCode, LogOut } from 'lucide-react';
+import { LayoutDashboard, CupSoda, Package, Calculator as CalcIcon, Settings as Gear, Tv, Info, Copy, Receipt, Boxes, Wallet, LayoutGrid, QrCode, LogOut, BookOpen } from 'lucide-react';
 import UPDATE_SQL from '../supabase/updates/003_features.sql?raw';
 import { StoreProvider, useStore, useAuth } from './lib/store.jsx';
 import { isRemote, schemaOutdated, supabase } from './lib/db.js';
@@ -18,13 +18,15 @@ import Sales from './pages/Sales.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Inventory from './pages/Inventory.jsx';
 import QR from './pages/QR.jsx';
+import MenuAdmin from './pages/MenuAdmin.jsx';
 
 // [المسار، الاسم، الأيقونة، الصفحة، للموظف؟، في شريط الجوال؟]
 const NAV = [
   ['/', 'الرئيسية', LayoutDashboard, Dashboard, false, true],
   ['/sales', 'المبيعات', Receipt, Sales, true, true],
+  ['/menu-admin', 'المنيو', BookOpen, MenuAdmin, false, true],
   ['/products', 'المنتجات', CupSoda, Products, false, true],
-  ['/materials', 'المواد', Package, Materials, false, true],
+  ['/materials', 'المواد', Package, Materials, false, false],
   ['/inventory', 'المخزون', Boxes, Inventory, false, false],
   ['/expenses', 'المصاريف', Wallet, Expenses, false, false],
   ['/calculator', 'الحاسبة', CalcIcon, Calculator, true, false],
