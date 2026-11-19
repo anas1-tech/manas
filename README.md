@@ -21,9 +21,9 @@ npm run dev
 
 ## الاستضافة: GitHub Pages
 
-الموقع منشور على: **https://anas1-tech.github.io/mans-coffee-cost/**
+الموقع منشور على: **https://anas1-tech.github.io/manas/**
 
-- المنيو: https://anas1-tech.github.io/mans-coffee-cost/menu
+- المنيو: https://anas1-tech.github.io/manas/menu
 - عشان تنشر أي تعديل: `npm run deploy`. هالأمر يشغّل الاختبارات ويبني الموقع ويرفعه على فرع `gh-pages`.
 
 ## قاعدة البيانات: Supabase (مرة وحدة)
