@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.jsx';
 import { stockLevels, packageBaseQty, materialBase } from '../lib/calc.js';
 import { UNITS, BASE_BIG, toMaterialBase, unitsForMaterial } from '../lib/units.js';
 import { money, num, CUR, date } from '../lib/format.js';
-import { Field, NumInput, Modal, Seg, Empty, navigate } from '../components/ui.jsx';
+import { Field, NumInput, Modal, Seg, Empty, navigate, Select } from '../components/ui.jsx';
 
 export function useStock() {
   const { materials, products, moves, sales } = useStore();
@@ -123,10 +123,10 @@ function StockDialog({ m, mode: initialMode, s, use, products, onClose }) {
         </p>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
           <NumInput value={qty} onChange={setQty} autoFocus />
-          <select className="select input" style={{ width: 170 }} value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="الوحدة">
+          <Select className="select input" style={{ width: 170 }} value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="الوحدة">
             <option value="pkg">{m.package_name || 'عبوة'} ({fmtLevel(m, s.pkg)})</option>
             {unitsForMaterial(m).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
-          </select>
+          </Select>
         </div>
         {mode === 'purchase' && <Field label={`سعر ال${m.package_name || 'عبوة'} في هالفاتورة`} hint={Number(price) !== Number(m.package_price) ? 'بيتحدث سعر المادة وتكلفة كل المنتجات' : ''}><NumInput value={price} onChange={setPrice} suffix={CUR} /></Field>}
         <Field label={`نبّهني لما يقل عن (${m.package_name || 'عبوة'})`}><NumInput value={minStock} onChange={setMinStock} placeholder="اختياري" /></Field>

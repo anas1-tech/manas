@@ -4,7 +4,7 @@ import { useRecordSales, today } from './Sales.jsx';
 import { useStore } from '../lib/store.jsx';
 import { makeCalc, productsUsingMaterial, suggestPrice } from '../lib/calc.js';
 import { money, pct, CUR } from '../lib/format.js';
-import { Seg, Field, Empty, MarginChip } from '../components/ui.jsx';
+import { Seg, Field, Empty, MarginChip, Select } from '../components/ui.jsx';
 
 export default function Calculator() {
   const { isAdmin } = useStore();
@@ -98,9 +98,9 @@ function WhatIf() {
     <div className="grid">
       <div className="panel grid g2">
         <Field label="المادة">
-          <select className="select input" value={matId} onChange={(e) => setMatId(e.target.value)}>
+          <Select className="select input" value={matId} onChange={(e) => setMatId(e.target.value)}>
             {[...materials].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
+          </Select>
         </Field>
         <Field label={`لو ${change >= 0 ? 'زاد' : 'نقص'} السعر ${Math.abs(change)}%`} hint={m ? `ال${m.package_name || 'عبوة'} يصير ${money(newPrice)} ${CUR} بدل ${money(Number(m.package_price))}` : ''}>
           <input type="range" className="range" min={-50} max={100} step={5} value={change} onChange={(e) => setChange(Number(e.target.value))} aria-label="نسبة التغيير" />

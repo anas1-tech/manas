@@ -3,7 +3,7 @@ import { Download, Upload, FileSpreadsheet, Printer, LogOut, Smartphone, Tv, Cop
 import { useStore } from '../lib/store.jsx';
 import { isRemote, supabase } from '../lib/db.js';
 const xl = () => import('../lib/excel.js');
-import { Field, NumInput, Switch, Seg, Modal, Link, navigate, href } from '../components/ui.jsx';
+import { Field, NumInput, Switch, Seg, Modal, Link, navigate, href, Select } from '../components/ui.jsx';
 
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
@@ -201,9 +201,9 @@ function StaffSection() {
                 <td>{x.name || '—'}</td>
                 <td dir="ltr" style={{ textAlign: 'right' }}>{shown(x.email)}</td>
                 <td>
-                  <select className="select input" style={{ minHeight: 34, padding: '4px 8px' }} value={x.role} disabled={x.email === me} onChange={(e) => saveRows('staff', [{ ...x, role: e.target.value }], 'تحدّثت الصلاحية')}>
+                  <Select className="select input" style={{ minHeight: 34, padding: '4px 8px' }} value={x.role} disabled={x.email === me} onChange={(e) => saveRows('staff', [{ ...x, role: e.target.value }], 'تحدّثت الصلاحية')}>
                     <option value="admin">مدير</option><option value="staff">موظف</option>
-                  </select>
+                  </Select>
                 </td>
                 <td style={{ width: 36 }}>{x.email !== me && <button className="btn icon ghost" style={{ width: 32, minHeight: 32 }} aria-label="شيل" onClick={() => deleteRow('staff', x.email, 'انشال')}><Trash2 size={15} /></button>}</td>
               </tr>

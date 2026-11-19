@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.jsx';
 import { costPerBase, costPerPiece, effectivePackagePrice, materialBase, packageBaseQty, productsUsingMaterial, materialUsage, makeCalc, suggestPrice } from '../lib/calc.js';
 import { UNITS, BASE_BIG, DENSITY_PRESETS } from '../lib/units.js';
 import { money, tiny, num, pct, CUR } from '../lib/format.js';
-import { Field, NumInput, Switch, Sheet, Empty, Delta, Modal, MarginChip, useConfirm, navigate, Combo, ChipPicker } from '../components/ui.jsx';
+import { Field, NumInput, Switch, Sheet, Empty, Delta, Modal, MarginChip, useConfirm, navigate, Combo, ChipPicker, Select } from '../components/ui.jsx';
 import { Sparkline } from '../components/charts.jsx';
 
 const PACKS = ['كرتون', 'كيس', 'علبة', 'جالون', 'قارورة', 'صندوق', 'باكت', 'ربطة', 'شدة', 'سطل', 'شوال', 'حبة'];
@@ -192,9 +192,9 @@ function MaterialEditor({ initial, isNew, onClose, onSave, onDelete, history, us
             <Field label="حجم الحبة الواحدة">
               <div className="row" style={{ flexWrap: 'nowrap' }}>
                 <NumInput value={m.unit_size} onChange={set('unit_size')} />
-                <select className="select input" style={{ width: 150 }} value={m.size_unit} onChange={(e) => set('size_unit')(e.target.value)}>
+                <Select className="select input" style={{ width: 150 }} value={m.size_unit} onChange={(e) => set('size_unit')(e.target.value)}>
                   {Object.entries(UNITS).filter(([, u]) => u.base === kind).map(([k, u]) => <option key={k} value={k}>{u.label}</option>)}
-                </select>
+                </Select>
               </div>
             </Field>
           )}
@@ -315,9 +315,9 @@ function Suppliers({ m, onUse, settings }) {
               <Field label="حجم الحبة">
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
                   <NumInput value={add.unit_size} onChange={(v) => setAdd({ ...add, unit_size: v })} />
-                  <select className="select input" style={{ width: 150 }} value={add.size_unit} onChange={(e) => setAdd({ ...add, size_unit: e.target.value })}>
+                  <Select className="select input" style={{ width: 150 }} value={add.size_unit} onChange={(e) => setAdd({ ...add, size_unit: e.target.value })}>
                     {Object.entries(UNITS).filter(([, u]) => u.base === base).map(([k, u]) => <option key={k} value={k}>{u.label}</option>)}
-                  </select>
+                  </Select>
                 </div>
               </Field>
             )}

@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.jsx';
 import { makeCalc, suggestPrice } from '../lib/calc.js';
 import { UNITS, unitsForBase, unitsForMaterial, baseOf, BASE_NAME } from '../lib/units.js';
 import { money, num, pct, CUR } from '../lib/format.js';
-import { Field, NumInput, Switch, Sheet, Empty, MarginChip, useConfirm, navigate, Combo } from '../components/ui.jsx';
+import { Field, NumInput, Switch, Sheet, Empty, MarginChip, useConfirm, navigate, Combo, Select } from '../components/ui.jsx';
 import { CostBar, Cup, colorLines, OTHER } from '../components/charts.jsx';
 
 const SIZES = ['صغير', 'وسط', 'كبير'];
@@ -215,9 +215,9 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
             <Field label="حجم الكوب" hint={sUnit !== 'ml' && p.serving_ml ? `= ${num(p.serving_ml, 0)} مل` : ''}>
               <div className="row" style={{ flexWrap: 'nowrap' }}>
                 <NumInput value={p.serving_ml ? +(p.serving_ml / sF).toFixed(2) : ''} onChange={(v) => set('serving_ml')(v === '' ? '' : +(v * sF).toFixed(1))} />
-                <select className="select input" style={{ width: 150 }} value={sUnit} onChange={(e) => set('serving_unit')(e.target.value)} aria-label="وحدة حجم الكوب">
+                <Select className="select input" style={{ width: 150 }} value={sUnit} onChange={(e) => set('serving_unit')(e.target.value)} aria-label="وحدة حجم الكوب">
                   {SERVING_UNITS.map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
-                </select>
+                </Select>
               </div>
               <div className="chips" style={{ marginTop: 4 }}>{CUP_SIZES[sUnit].map((v) => <button type="button" key={v} className="filter-chip" style={{ padding: '2px 10px', fontSize: 13 }} aria-pressed={Math.abs(Number(p.serving_ml) - v * sF) < 0.5} onClick={() => set('serving_ml')(+(v * sF).toFixed(1))}><span className="num">{v}</span> {UNITS[sUnit].short}</button>)}</div>
             </Field>
@@ -229,9 +229,9 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
           <Field label="كم تطلع الخلطة؟" hint="الكمية الجاهزة بعد التحضير. منها تنحسب تكلفة كل مل في الكوب.">
             <div className="row" style={{ flexWrap: 'nowrap' }}>
               <NumInput value={p.yield_qty} onChange={set('yield_qty')} />
-              <select className="select input" style={{ width: 170 }} value={p.yield_unit} onChange={(e) => set('yield_unit')(e.target.value)}>
+              <Select className="select input" style={{ width: 170 }} value={p.yield_unit} onChange={(e) => set('yield_unit')(e.target.value)}>
                 {['ml', 'g', 'pcs'].map((b) => <optgroup key={b} label={BASE_NAME[b]}>{unitsForBase(b).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}</optgroup>)}
-              </select>
+              </Select>
             </div>
           </Field>
         )}
@@ -272,19 +272,19 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
             return (
               <div className="ing" key={i}>
                 <span className="dot" style={{ background: it.id ? colorOf(it) : 'transparent' }} />
-                <select className="select input ing-name" value={it.id ? optionKey(it) : ''} onChange={(e) => pick(i, e.target.value)} aria-label="المكوّن">
+                <Select className="select input ing-name" value={it.id ? optionKey(it) : ''} onChange={(e) => pick(i, e.target.value)} aria-label="المكوّن">
                   <option value="" disabled>اختر مكوّن…</option>
                   {isCombo && <optgroup label="المنتجات">{sellables.map((c) => <option key={c.id} value={`product:${c.id}`}>{c.name}{c.size ? ` ${c.size}` : ''}</option>)}</optgroup>}
                   {components.length > 0 && <optgroup label="خلطات">{components.map((c) => <option key={c.id} value={`product:${c.id}`}>{c.name}</option>)}</optgroup>}
                   <optgroup label="مواد">{[...materials].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map((m) => <option key={m.id} value={`material:${m.id}`}>{m.name}</option>)}</optgroup>
-                </select>
+                </Select>
                 <div className="ing-qty"><NumInput value={it.qty} onChange={(v) => setItem(i, { qty: v })} aria-label="الكمية" /></div>
-                <select className="select input ing-unit" value={it.unit} onChange={(e) => setItem(i, { unit: e.target.value })} aria-label="الوحدة" disabled={!allowed.length}>
+                <Select className="select input ing-unit" value={it.unit} onChange={(e) => setItem(i, { unit: e.target.value })} aria-label="الوحدة" disabled={!allowed.length}>
                   {!allowed.length && <option value={it.unit}>{UNITS[it.unit]?.label}</option>}
                   {bases.length > 1
                     ? bases.map((b) => <optgroup key={b} label={BASE_NAME[b]}>{allowed.filter((u) => baseOf(u) === b).map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}</optgroup>)
                     : allowed.map((u) => <option key={u} value={u}>{UNITS[u].label}</option>)}
-                </select>
+                </Select>
                 <span className="ing-cost num">{line && it.id ? money(line.cost) : ''}</span>
                 <button className="btn icon ghost del" style={{ width: 34, minHeight: 34 }} onClick={() => removeItem(i)} aria-label="شيل المكوّن"><X size={16} /></button>
               </div>

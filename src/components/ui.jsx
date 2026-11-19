@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Children, isValidElement, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, X, CheckCircle2, AlertTriangle, TrendingUp, TrendingDown, Minus, CircleCheck, CircleAlert, OctagonAlert } from 'lucide-react';
 import { STATUS, pct } from '../lib/format.js';
 
@@ -244,5 +245,124 @@ export function ChipPicker({ value, onChange, options, otherLabel = 'أخرى…
       </div>
       {other && <input className="input" value={value} onChange={(e) => onChange(e.target.value)} placeholder="اكتب نوع العبوة" autoFocus />}
     </div>
+  );
+}
+
+// ───────── قائمة منسدلة مخصصة (بديل <select> اللي شكله ما يتغير) ─────────
+const textOf = (c) => Children.toArray(c).map((x) => (typeof x === 'string' || typeof x === 'number' ? x : '')).join('');
+function parseOptions(children) {
+  const groups = [];
+  let loose = null;
+  Children.toArray(children).forEach((el) => {
+    if (!isValidElement(el)) return;
+    if (el.type === 'optgroup') {
+      groups.push({ label: el.props.label, options: Children.toArray(el.props.children).filter(isValidElement).map((o) => ({ value: String(o.props.value), label: textOf(o.props.children), disabled: o.props.disabled })) });
+    } else if (el.type === 'option') {
+      if (!loose) { loose = { label: null, options: [] }; groups.push(loose); }
+      loose.options.push({ value: String(el.props.value), label: textOf(el.props.children), disabled: el.props.disabled });
+    }
+  });
+  return groups;
+}
+
+/**
+ * نفس استخدام <select>: نفس value و onChange(e) و <option>/<optgroup>،
+ * بس القائمة نفسها بشكل الموقع (فاتح وداكن).
+ */
+export function Select({ value, onChange, children, className = '', style, disabled, 'aria-label': ariaLabel }) {
+  const groups = parseOptions(children);
+  const all = groups.flatMap((g) => g.options);
+  const usable = all.filter((o) => !o.disabled);
+  const current = all.find((o) => o.value === String(value ?? ''));
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [pos, setPos] = useState(null);
+  const btn = useRef(null);
+  const pop = useRef(null);
+  const typed = useRef({ s: '', t: 0 });
+  const openedAt = useRef(0);
+
+  const place = () => {
+    const r = btn.current.getBoundingClientRect();
+    const below = innerHeight - r.bottom - 8;
+    const want = Math.min(320, usable.length * 40 + groups.filter((g) => g.label).length * 30 + 10);
+    const up = below < want && r.top > below;
+    setPos({ right: innerWidth - r.right, minWidth: Math.max(r.width, 150), top: up ? undefined : r.bottom + 4, bottom: up ? innerHeight - r.top + 4 : undefined, maxHeight: Math.max(160, Math.min(320, (up ? r.top - 8 : below))) });
+  };
+  const openList = () => { if (disabled) return; openedAt.current = Date.now(); place(); setActive(Math.max(0, usable.findIndex((o) => o.value === current?.value))); setOpen(true); };
+  const choose = (o) => { setOpen(false); btn.current?.focus(); if (o.value !== String(value)) onChange?.({ target: { value: o.value } }); };
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (!pop.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
+    // نتجاهل التمرير اللي يصير لحظة الفتح (مثل تمرير الجوال قبل اللمس)
+    const scroll = (e) => { if (Date.now() - openedAt.current > 250 && !pop.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    window.addEventListener('scroll', scroll, true);
+    window.addEventListener('resize', scroll);
+    return () => { document.removeEventListener('pointerdown', away); window.removeEventListener('scroll', scroll, true); window.removeEventListener('resize', scroll); };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (open && active >= 0) pop.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [open, active]);
+  // لو القائمة طلعت برا الشاشة (الجوال) نرجعها داخلها
+  useLayoutEffect(() => {
+    if (!open || !pos || !pop.current) return;
+    const r = pop.current.getBoundingClientRect();
+    if (r.left < 8) setPos((x) => ({ ...x, right: x.right - (8 - r.left) }));
+  }, [open, pos?.top, pos?.bottom]);
+
+  const onKey = (e) => {
+    if (disabled) return;
+    if (!open && ['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); openList(); return; }
+    if (!open) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, usable.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+    else if (e.key === 'End') { e.preventDefault(); setActive(usable.length - 1); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (usable[active]) choose(usable[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+    else if (e.key === 'Tab') setOpen(false);
+    else if (e.key.length === 1) {
+      const now = Date.now();
+      typed.current = { s: (now - typed.current.t < 700 ? typed.current.s : '') + e.key, t: now };
+      const i = usable.findIndex((o) => o.label.startsWith(typed.current.s));
+      if (i >= 0) setActive(i);
+    }
+  };
+
+  let idx = -1;
+  return (
+    <>
+      <button
+        type="button" ref={btn} className={`select input sel-btn ${className}`} style={style} disabled={disabled}
+        aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+        onClick={() => (open ? setOpen(false) : openList())} onKeyDown={onKey}
+      >
+        <span className={current && !current.disabled ? '' : 'muted'}>{current?.label ?? ''}</span>
+      </button>
+      {open && pos && createPortal(
+        <div ref={pop} className="sel-pop" role="listbox" aria-label={ariaLabel} dir="rtl"
+          style={{ right: pos.right, minWidth: pos.minWidth, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}>
+          {groups.map((g, gi) => (
+            <div key={gi} role={g.label ? 'group' : undefined} aria-label={g.label || undefined}>
+              {g.label && <div className="sel-group">{g.label}</div>}
+              {g.options.filter((o) => !o.disabled).map((o) => {
+                idx += 1;
+                const i = idx;
+                return (
+                  <div key={o.value} data-i={i} role="option" aria-selected={o.value === current?.value}
+                    className={`sel-opt${i === active ? ' active' : ''}`}
+                    onPointerEnter={() => setActive(i)} onPointerDown={(e) => { e.preventDefault(); choose(o); }}>
+                    {o.label}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

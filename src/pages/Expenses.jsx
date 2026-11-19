@@ -3,7 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { monthlyFixed, avgUnitProfit, breakEven, salesSummary } from '../lib/calc.js';
 import { money, num, CUR } from '../lib/format.js';
-import { Field, NumInput, Modal, Empty, useConfirm, Combo } from '../components/ui.jsx';
+import { Field, NumInput, Modal, Empty, useConfirm, Combo, Select } from '../components/ui.jsx';
 
 const PERIODS = { day: 'يومياً', week: 'أسبوعياً', month: 'شهرياً', year: 'سنوياً' };
 const SUGGEST = ['إيجار', 'رواتب', 'كهرباء', 'ماء', 'إنترنت', 'اشتراك نقاط البيع', 'صيانة', 'تسويق', 'رخص وتجديدات', 'نظافة'];
@@ -88,9 +88,9 @@ export default function Expenses() {
             <div className="grid g2">
               <Field label="المبلغ"><NumInput value={edit.amount} onChange={(v) => setEdit({ ...edit, amount: v })} suffix={CUR} /></Field>
               <Field label="كل">
-                <select className="select input" value={edit.period} onChange={(e) => setEdit({ ...edit, period: e.target.value })}>
+                <Select className="select input" value={edit.period} onChange={(e) => setEdit({ ...edit, period: e.target.value })}>
                   {Object.entries(PERIODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
+                </Select>
               </Field>
             </div>
             <div className="row">
