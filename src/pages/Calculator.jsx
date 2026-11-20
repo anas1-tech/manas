@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { RotateCcw, Check } from 'lucide-react';
 import { useRecordSales, today } from './Sales.jsx';
 import { useStore } from '../lib/store.jsx';
-import { makeCalc, productsUsingMaterial, suggestPrice } from '../lib/calc.js';
+import { makeCalc, productsUsingMaterial, suggestPrice, fullCost } from '../lib/calc.js';
 import { money, pct, CUR } from '../lib/format.js';
 import { Seg, Field, Empty, MarginChip, Select } from '../components/ui.jsx';
 
@@ -25,7 +25,7 @@ export default function Calculator() {
 }
 
 function OrderCalc() {
-  const { products, calc, settings, isAdmin } = useStore();
+  const { products, calc, settings, isAdmin, oh } = useStore();
   const [counts, setCounts] = useState({});
   const record = useRecordSales();
   const sellable = products.filter((p) => !p.is_component && Number(p.sell_price) > 0);
@@ -72,7 +72,16 @@ function OrderCalc() {
             <div className="receipt-total"><span>المجموع</span><b className="num">{money(tot.shelf)} {CUR}</b></div>
             {settings.vat_registered && <div className="receipt-total"><span className="muted">منها ضريبة</span><span className="num">{money(tot.vat)}</span></div>}
             {isAdmin && <div className="receipt-total"><span className="muted">التكلفة</span><span className="num">{money(tot.cost)}</span></div>}
-            {isAdmin && <div className="receipt-total final"><span>صافي الربح</span><b className="num">{money(profit)} {CUR}</b></div>}
+            {isAdmin && <div className="receipt-total final"><span>{oh.active ? 'الربح' : 'صافي الربح'}</span><b className="num">{money(profit)} {CUR}</b></div>}
+            {isAdmin && oh.active && (() => {
+              const share = lines.reduce((a, l) => a + fullCost(l.c, oh).share * l.n, 0);
+              return (
+                <>
+                  <div className="receipt-total"><span className="muted">نصيب المصاريف</span><span className="num">{money(share)}</span></div>
+                  <div className="receipt-total final"><span>الصافي بعد المصاريف</span><b className="num" style={{ color: profit - share < 0 ? 'var(--bad)' : 'var(--good)' }}>{money(profit - share)} {CUR}</b></div>
+                </>
+              );
+            })()}
             {isAdmin && <p className="muted small" style={{ margin: 0 }}>هامش <span className="num">{pct(tot.net ? profit / tot.net : null)}</span> من الإيراد{settings.vat_registered ? ' بدون ضريبة' : ''}.</p>}
             <button className="btn primary" style={{ width: '100%', marginTop: 12 }} onClick={async () => { if (await record(counts, today())) setCounts({}); }}><Check /> سجّلها كمبيعات اليوم</button>
           </>

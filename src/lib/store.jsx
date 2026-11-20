@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { db, isRemote, supabase } from './db.js';
-import { DEFAULT_SETTINGS, makeCalc } from './calc.js';
+import { DEFAULT_SETTINGS, makeCalc, overheadInfo } from './calc.js';
 import { seedData } from './seed.js';
 
 const Ctx = createContext(null);
@@ -127,8 +127,10 @@ export function StoreProvider({ children, enabled }) {
 
   const calc = useMemo(() => makeCalc(data.materials, data.products, data.settings), [data.materials, data.products, data.settings]);
   const isAdmin = data.role === 'admin';
+  // نصيب كل منتج من الإيجار والكهرباء وغيرها
+  const oh = useMemo(() => overheadInfo(data.expenses, data.settings, data.sales, calc), [data.expenses, data.settings, data.sales, calc]);
 
-  const value = { ...data, calc, isAdmin, loading, error, reload, toast, toasts, ...actions };
+  const value = { ...data, calc, oh, isAdmin, loading, error, reload, toast, toasts, ...actions };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

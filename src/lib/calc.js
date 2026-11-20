@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS = {
   vat_registered: false,
   target_margin: 65,
   default_waste: 0,
+  overhead_mode: 'unit', // unit = بالتساوي على كل حبة، price = حسب سعر المنتج، off = بدون
+  expected_units: null,  // كم حبة تبيع بالشهر (تقدير). لو فاضي ناخذه من مبيعات آخر 30 يوم
 };
 
 export const vatFactor = (s) => 1 + (Number(s?.vat_rate) || 0) / 100;
@@ -279,4 +281,64 @@ export function salesSummary(sales, calc, from, to) {
     byDay.set(sa.sale_date, bd);
   }
   return { qty, revenue, net, cost, profit: net - cost, byProduct: [...byProduct.values()], byDay };
+}
+
+/**
+ * توزيع المصاريف الثابتة (إيجار، كهرباء…) على المنتجات.
+ * - unit: كل حبة تتحمل نفس المبلغ = مصاريف الشهر ÷ عدد الحبات المباعة بالشهر.
+ * - price: كل منتج يتحمل نسبة من سعره = مصاريف الشهر ÷ مبيعات الشهر.
+ */
+export function overheadInfo(expenses, s, sales, calc) {
+  const fixed = monthlyFixed(expenses, s);
+  const mode = s.overhead_mode || 'unit';
+  // مبيعات آخر 30 يوم
+  const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  let soldQty = 0, soldNet = 0, firstDay = null;
+  for (const sa of sales) {
+    if (sa.sale_date < since) continue;
+    const c = calc.product(sa.product_id);
+    if (c?.product.kind === 'addon') continue;
+    const q = Number(sa.qty) || 0;
+    soldQty += q;
+    soldNet += (sa.unit_net != null ? Number(sa.unit_net) : c?.net ?? Number(sa.unit_price)) * q;
+    if (!firstDay || sa.sale_date < firstDay) firstDay = sa.sale_date;
+  }
+  // لو المبيعات أقل من 30 يوم نكبّرها لشهر كامل
+  const days = firstDay ? Math.max(1, Math.round((Date.now() - new Date(firstDay)) / 864e5) + 1) : 0;
+  const scale = days ? 30 / Math.min(days, 30) : 0;
+  const salesUnits = soldQty * scale;
+  const salesNet = soldNet * scale;
+  const expected = Number(s.expected_units) > 0 ? Number(s.expected_units) : null;
+  const units = expected ?? (salesUnits > 0 ? salesUnits : null);
+  const source = expected ? 'estimate' : salesUnits > 0 ? 'sales' : 'none';
+  // صافي المبيعات المتوقع (لطريقة «حسب السعر»): من المبيعات، أو التقدير × متوسط السعر
+  let revenue = salesNet > 0 && !expected ? salesNet : null;
+  if (!revenue && units) {
+    const avg = salesUnits > 0 ? salesNet / salesUnits : (() => {
+      const l = calc.all().filter((c) => c && !c.product.is_component && c.product.kind !== 'addon' && c.net > 0);
+      return l.length ? l.reduce((a, c) => a + c.net, 0) / l.length : 0;
+    })();
+    revenue = units * avg || null;
+  }
+  const perUnit = fixed && units ? fixed / units : 0;
+  const rate = fixed && revenue ? fixed / revenue : 0;
+  const active = mode !== 'off' && fixed > 0 && (mode === 'unit' ? perUnit > 0 : rate > 0);
+  return { fixed, mode, units, source, salesUnits, perUnit, rate, revenue, active };
+}
+
+/** نصيب منتج واحد من المصاريف */
+export function overheadFor(c, oh) {
+  if (!oh?.active || !c || c.product.is_component || c.product.kind === 'addon') return 0;
+  if (oh.mode === 'price') return c.net * oh.rate;
+  // العرض يتحمل نصيب كل حبة فيه
+  const pieces = c.product.kind === 'combo' ? (c.product.items || []).reduce((a, it) => a + (it.type === 'product' ? toBase(it.qty, it.unit) : 0), 0) || 1 : 1;
+  return oh.perUnit * pieces;
+}
+
+/** التكلفة الكاملة والربح الصافي */
+export function fullCost(c, oh) {
+  const share = overheadFor(c, oh);
+  const total = c.total + share;
+  const netProfit = c.net - total;
+  return { share, total, netProfit, netMargin: c.net > 0 && !c.noRecipe ? netProfit / c.net : null };
 }

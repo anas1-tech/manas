@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { monthlyFixed, avgUnitProfit, breakEven, salesSummary } from '../lib/calc.js';
+import { monthlyFixed, avgUnitProfit, breakEven, salesSummary, fullCost } from '../lib/calc.js';
 import { money, num, CUR } from '../lib/format.js';
-import { Field, NumInput, Modal, Empty, useConfirm, Combo, Select } from '../components/ui.jsx';
+import { Field, NumInput, Modal, Empty, useConfirm, Combo, Select, Seg } from '../components/ui.jsx';
 
 const PERIODS = { day: 'يومياً', week: 'أسبوعياً', month: 'شهرياً', year: 'سنوياً' };
 const SUGGEST = ['إيجار', 'رواتب', 'كهرباء', 'ماء', 'إنترنت', 'اشتراك نقاط البيع', 'صيانة', 'تسويق', 'رخص وتجديدات', 'نظافة'];
 
 export default function Expenses() {
-  const { expenses, settings, calc, products, sales, saveRows, deleteRow, saveSettings } = useStore();
+  const { expenses, settings, calc, products, sales, saveRows, deleteRow, saveSettings, oh } = useStore();
   const [edit, setEdit] = useState(null);
   const [confirm, confirmUi] = useConfirm();
   const fixed = monthlyFixed(expenses, settings);
@@ -58,6 +58,8 @@ export default function Expenses() {
         <span className="muted small">أيام الشغل بالشهر:</span>
         <div style={{ width: 110 }}><NumInput value={settings.working_days ?? 30} onChange={(v) => v && saveSettings({ working_days: Number(v) })} suffix="يوم" /></div>
       </div>
+
+      {expenses.length > 0 && <Allocation oh={oh} settings={settings} saveSettings={saveSettings} calc={calc} products={products} />}
 
       {!expenses.length ? (
         <Empty title="ما فيه مصاريف" action={<button className="btn primary" onClick={() => setEdit({ id: crypto.randomUUID(), name: '', category: '', amount: '', period: 'month', notes: '' })}><Plus /> أضف أول مصروف</button>}>
@@ -108,3 +110,68 @@ export default function Expenses() {
 }
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+
+/** توزيع المصاريف على كل كوب أو منتج */
+function Allocation({ oh, settings, saveSettings, calc, products }) {
+  const [units, setUnits] = useState(settings.expected_units ?? '');
+  const mode = settings.overhead_mode || 'unit';
+  const sample = products.filter((p) => !p.is_component && p.kind !== 'addon' && Number(p.sell_price) > 0 && (p.items || []).some((it) => it.id)).slice(0, 6).map((p) => ({ p, c: calc.product(p.id) }));
+  return (
+    <section className="panel grid" style={{ marginBottom: 16 }}>
+      <div className="panel-head" style={{ marginBottom: 0 }}>
+        <h2>توزيع المصاريف على المنتجات</h2>
+        <Seg value={mode} onChange={(v) => saveSettings({ overhead_mode: v })} label="طريقة التوزيع" options={[['unit', 'بالتساوي على كل حبة'], ['price', 'حسب سعر المنتج'], ['off', 'لا توزّع']]} />
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>
+        {mode === 'unit' && 'كل كوب أو حبة تبيعها تتحمل نفس المبلغ من الإيجار والكهرباء والرواتب.'}
+        {mode === 'price' && 'المنتج الغالي يتحمل أكثر: كل ريال مبيعات يتحمل نفس النسبة من المصاريف.'}
+        {mode === 'off' && 'التكلفة تحسب المواد بس، والمصاريف تطلع في نقطة التعادل والتقارير.'}
+      </p>
+      {mode !== 'off' && (
+        <>
+          <Field label="كم حبة تبيع بالشهر تقريباً؟" hint={oh.salesUnits > 0 ? `من مبيعاتك آخر 30 يوم: تقريباً ${num(Math.round(oh.salesUnits), 0)} حبة بالشهر. خلّه فاضي ويستخدمها تلقائياً.` : 'حط تقدير الحين، وبعد ما تسجّل مبيعات تقدر تفضّيه ويحسب من مبيعاتك الفعلية.'}>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <NumInput value={units} onChange={setUnits} suffix="حبة" placeholder={oh.salesUnits > 0 ? String(Math.round(oh.salesUnits)) : 'مثال: 3000'} />
+              <button className="btn" disabled={String(units) === String(settings.expected_units ?? '')} onClick={() => saveSettings({ expected_units: units === '' ? null : Number(units) })}>حفظ</button>
+            </div>
+          </Field>
+          {oh.active ? (
+            <div className="formula">
+              <div className="formula-line">
+                مصاريف الشهر <b className="num">{money(oh.fixed)}</b> ÷ {mode === 'unit' ? <><b className="num">{num(Math.round(oh.units), 0)}</b> حبة</> : <>مبيعات <b className="num">{money(oh.revenue)}</b></>}
+                <span className="muted">({oh.source === 'sales' ? 'من مبيعاتك' : 'من تقديرك'})</span>
+              </div>
+              <div className="formula-result">
+                {mode === 'unit'
+                  ? <div><span>كل حبة تتحمل</span><b className="num">{money(oh.perUnit)} {CUR}</b></div>
+                  : <div><span>كل ريال مبيعات يتحمل</span><b className="num">{Math.round(oh.rate * 100)} هللة ({Math.round(oh.rate * 100)}%)</b></div>}
+              </div>
+            </div>
+          ) : <p className="muted small" style={{ margin: 0 }}>حط كم حبة تبيع بالشهر عشان نحسب نصيب كل منتج.</p>}
+          {oh.active && sample.length > 0 && (
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>المنتج</th><th className="n">المواد</th><th className="n">المصاريف</th><th className="n">التكلفة الكاملة</th><th className="n">السعر</th><th className="n">الصافي</th></tr></thead>
+                <tbody>
+                  {sample.map(({ p, c }) => {
+                    const f = fullCost(c, oh);
+                    return (
+                      <tr key={p.id}>
+                        <td>{p.name} <span className="muted">{p.size}</span></td>
+                        <td className="n num">{money(c.total)}</td>
+                        <td className="n num">{money(f.share)}</td>
+                        <td className="n num"><b>{money(f.total)}</b></td>
+                        <td className="n num">{money(c.shelf)}</td>
+                        <td className="n num" style={{ color: f.netProfit < 0 ? 'var(--bad)' : 'var(--good)' }}>{money(f.netProfit)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

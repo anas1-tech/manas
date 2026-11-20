@@ -102,3 +102,29 @@ test('العرض: مجموع أسعار المنتجات منفردة', () => {
   const combo = { id: 'c', kind: 'combo', sell_price: 10, items: [{ type: 'product', id: 'a', qty: 1, unit: 'pcs' }, { type: 'product', id: 'b', qty: 1, unit: 'pcs' }] };
   assert.equal(makeCalc([], [a, b, combo], S).product('c').itemsShelf, 12);
 });
+
+test('توزيع المصاريف: بالتساوي على كل حبة', async () => {
+  const { overheadInfo, fullCost } = await import('./calc.js');
+  const karak = { id: 'k', sell_price: 4, items: [{ type: 'material', id: 'm1', qty: 200, unit: 'ml' }] };
+  const calc = makeCalc([milk], [karak], S);
+  const s = { ...S, overhead_mode: 'unit', expected_units: 3000 };
+  const oh = overheadInfo([{ amount: 4500, period: 'month' }], s, [], calc);
+  assert.equal(oh.perUnit, 1.5); // 4500 ÷ 3000
+  const f = fullCost(calc.product('k'), oh);
+  assert.equal(f.share, 1.5);
+  assert.equal(f.total.toFixed(2), (1.1 + 1.5).toFixed(2));
+  assert.equal(f.netProfit.toFixed(2), (4 - 2.6).toFixed(2));
+});
+
+test('توزيع المصاريف: حسب السعر ومن المبيعات', async () => {
+  const { overheadInfo, fullCost } = await import('./calc.js');
+  const karak = { id: 'k', sell_price: 4, items: [{ type: 'material', id: 'm1', qty: 200, unit: 'ml' }] };
+  const calc = makeCalc([milk], [karak], S);
+  const d = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const sales = Array.from({ length: 30 }, (_, i) => ({ product_id: 'k', qty: 50, sale_date: d(i), unit_net: 4 }));
+  const oh = overheadInfo([{ amount: 1200, period: 'month' }], { ...S, overhead_mode: 'price' }, sales, calc);
+  assert.equal(oh.source, 'sales');
+  assert.equal(Math.round(oh.units), 1500);
+  assert.equal(oh.rate.toFixed(2), '0.20'); // 1200 ÷ (1500 × 4)
+  assert.equal(fullCost(calc.product('k'), oh).share.toFixed(2), '0.80');
+});

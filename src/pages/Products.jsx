@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Copy, X, Layers, Sparkles, ImagePlus, Gift, PlusCircle } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { makeCalc, suggestPrice } from '../lib/calc.js';
+import { makeCalc, suggestPrice, fullCost } from '../lib/calc.js';
 import { UNITS, unitsForBase, unitsForMaterial, baseOf, BASE_NAME } from '../lib/units.js';
 import { money, num, pct, CUR } from '../lib/format.js';
 import { Field, NumInput, Switch, Sheet, Empty, MarginChip, useConfirm, navigate, Combo, Select } from '../components/ui.jsx';
@@ -18,7 +18,7 @@ export const blankProduct = (s) => ({
 });
 
 export default function Products() {
-  const { products, calc, settings, saveProduct, deleteProduct, materials, loadSample } = useStore();
+  const { products, calc, settings, saveProduct, deleteProduct, materials, loadSample, oh } = useStore();
   const [q, setQ] = useState('');
   const [view, setView] = useState('sell');
   const [edit, setEdit] = useState(null);
@@ -90,7 +90,12 @@ export default function Products() {
                     <span className="item-sub">
                       {p.is_component
                         ? <>تطلع <span className="num">{num(p.yield_qty)}</span> {UNITS[p.yield_unit]?.label} · تكلفتها <span className="num">{money(c.total)}</span> {CUR}</>
-                        : <>تكلفة <span className="num">{money(c.total)}</span> · بيع <span className="num">{money(c.shelf)}</span> {CUR} · ربح <span className="num">{money(c.profit)}</span></>}
+                        : (() => {
+                          const f = fullCost(c, oh);
+                          return f.share > 0 && !c.noRecipe
+                            ? <>تكلفة <span className="num">{money(c.total)}</span> + مصاريف <span className="num">{money(f.share)}</span> · بيع <span className="num">{money(c.shelf)}</span> {CUR} · صافي <span className="num" style={{ color: f.netProfit < 0 ? 'var(--bad)' : undefined }}>{money(f.netProfit)}</span></>
+                            : <>تكلفة <span className="num">{money(c.total)}</span> · بيع <span className="num">{money(c.shelf)}</span> {CUR} · ربح <span className="num">{money(c.profit)}</span></>;
+                        })()}
                     </span>
                     <span className="item-end">
                       {p.is_component
@@ -121,7 +126,7 @@ export default function Products() {
 }
 
 function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate }) {
-  const { materials, products, settings } = useStore();
+  const { materials, products, settings, oh } = useStore();
   const [p, setP] = useState(initial);
   const [confirm, confirmUi] = useConfirm();
   const [dup, setDup] = useState(false);
@@ -325,10 +330,25 @@ function ProductEditor({ initial, isNew, onClose, onSave, onDelete, onDuplicate 
             {settings.vat_registered && <div style={{ alignSelf: 'center' }}><Switch checked={p.price_includes_vat} onChange={set('price_includes_vat')} label="السعر شامل الضريبة" hint={`الزبون يدفع ${money(live.shelf)} ${CUR}`} /></div>}
           </div>
           <div className="price-box">
-            <div><span>التكلفة</span><b className="num">{money(live.total)}</b></div>
+            <div><span>تكلفة المواد</span><b className="num">{money(live.total)}</b></div>
             <div className={live.status}><span>الربح{settings.vat_registered ? ' (بعد الضريبة)' : ''}</span><b className="num">{money(live.profit)}</b></div>
             <div className={live.status}><span>هامش الربح</span><b className="num">{pct(live.margin)}</b></div>
           </div>
+          {(() => {
+            const f = fullCost(live, oh);
+            if (!f.share || live.noRecipe) return null;
+            return (
+              <div className="full-cost">
+                <div className="full-cost-title">بعد إضافة نصيبه من الإيجار والكهرباء والرواتب</div>
+                <div className="price-box" style={{ marginTop: 6 }}>
+                  <div><span>نصيب المصاريف</span><b className="num">{money(f.share)}</b></div>
+                  <div><span>التكلفة الكاملة</span><b className="num">{money(f.total)}</b></div>
+                  <div className={f.netProfit < 0 ? 'bad' : 'good'}><span>الربح الصافي</span><b className="num">{money(f.netProfit)}</b> <small className="num">{pct(f.netMargin)}</small></div>
+                </div>
+                {f.netProfit < 0 && <p className="small" style={{ color: 'var(--bad)', margin: '8px 0 0' }}>هالسعر يخسّرك بعد المصاريف. أقل سعر بدون خسارة: <b className="num">{money(settings.vat_registered ? f.total * (1 + settings.vat_rate / 100) : f.total)}</b> {CUR}</p>}
+              </div>
+            );
+          })()}
           {live.total > 0 && (
             <div className="suggest">
               <Sparkles size={18} />

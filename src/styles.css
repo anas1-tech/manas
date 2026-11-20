@@ -461,3 +461,10 @@ select option, select optgroup { background: var(--surface); color: var(--ink); 
   .menu-admin-row { grid-template-columns: 1fr; }
   .menu-admin-row .item-end { grid-row: auto; grid-column: 1; justify-items: start; margin-top: 6px; }
 }
+
+/* التكلفة الكاملة (مع المصاريف) */
+.full-cost { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.full-cost-title { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.price-box small { font-size: 12px; color: var(--ink-3); margin-inline-start: 4px; }
+/* محاذاة أعمدة الأرقام مع عناوينها (الأرقام اتجاهها LTR داخل صفحة RTL) */
+.table td.num, .table th.n, .table td.n { text-align: left; }

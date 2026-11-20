@@ -1,13 +1,13 @@
 import { Printer, ArrowRight } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
 import { money, pct, CUR, tiny } from '../lib/format.js';
-import { costPerBase, materialBase } from '../lib/calc.js';
+import { costPerBase, materialBase, fullCost } from '../lib/calc.js';
 import { UNITS } from '../lib/units.js';
 import { MarginChip, navigate } from '../components/ui.jsx';
 import { packText } from './Materials.jsx';
 
 export default function Report() {
-  const { products, materials, calc, settings } = useStore();
+  const { products, materials, calc, settings, oh } = useStore();
   const sell = products.filter((p) => !p.is_component).map((p) => calc.product(p.id));
   const today = new Date().toLocaleDateString('ar-SA-u-nu-latn-ca-gregory', { day: 'numeric', month: 'long', year: 'numeric' });
   return (
@@ -24,12 +24,15 @@ export default function Report() {
       <section className="panel table-wrap">
         <h2 style={{ marginBottom: 10 }}>المنتجات</h2>
         <table className="table">
-          <thead><tr><th>المنتج</th><th>الحجم</th><th className="n">التكلفة</th><th className="n">سعر البيع</th><th className="n">الربح</th><th className="n">الهامش</th></tr></thead>
+          <thead><tr><th>المنتج</th><th>الحجم</th><th className="n">تكلفة المواد</th>{oh.active && <><th className="n">نصيب المصاريف</th><th className="n">التكلفة الكاملة</th></>}<th className="n">سعر البيع</th><th className="n">الربح</th>{oh.active && <th className="n">الصافي</th>}<th className="n">الهامش</th></tr></thead>
           <tbody>
             {sell.map((c) => (
               <tr key={c.id}>
                 <td>{c.product.name}</td><td>{c.product.size}</td>
-                <td className="n num">{money(c.total)}</td><td className="n num">{money(c.shelf)}</td><td className="n num">{money(c.profit)}</td>
+                <td className="n num">{money(c.total)}</td>
+                {oh.active && <><td className="n num">{money(fullCost(c, oh).share)}</td><td className="n num">{money(fullCost(c, oh).total)}</td></>}
+                <td className="n num">{money(c.shelf)}</td><td className="n num">{money(c.profit)}</td>
+                {oh.active && <td className="n num">{money(fullCost(c, oh).netProfit)}</td>}
                 <td className="n"><MarginChip margin={c.margin} status={c.status} /></td>
               </tr>
             ))}
