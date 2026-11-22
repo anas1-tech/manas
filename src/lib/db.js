@@ -20,6 +20,7 @@ const NEW_COLS = {
   materials: ['density', 'min_stock'],
   products: ['serving_unit', 'kind', 'name_en', 'description_en', 'image_url'],
   settings: ['working_days', 'menu_lang', 'overhead_mode', 'expected_units'],
+  sales: ['discount'],
 };
 export let schemaOutdated = false;
 const markOutdated = () => {
@@ -58,7 +59,8 @@ const remoteDb = {
     if ([e, sa, mv, of, st].some((r) => r.error)) markOutdated();
     const probe = await supabase.from('products').select('kind,serving_unit').limit(1);
     const probe2 = await supabase.from('settings').select('overhead_mode,expected_units').limit(1);
-    if (probe.error || probe2.error) markOutdated();
+    const probe3 = await supabase.from('sales').select('discount').limit(1);
+    if (probe.error || probe2.error || probe3.error) markOutdated();
     const email = (await supabase.auth.getUser()).data.user?.email?.toLowerCase();
     const me = (st.data || []).find((x) => x.email.toLowerCase() === email);
     // قبل التحديث: أي حساب يعتبر مدير (مثل ما كان)

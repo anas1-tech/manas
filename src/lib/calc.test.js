@@ -128,3 +128,21 @@ test('توزيع المصاريف: حسب السعر ومن المبيعات', a
   assert.equal(oh.rate.toFixed(2), '0.20'); // 1200 ÷ (1500 × 4)
   assert.equal(fullCost(calc.product('k'), oh).share.toFixed(2), '0.80');
 });
+
+test('الخصومات: خصم منتج + خصم شامل يتوزع على الأسطر', async () => {
+  const { applyDiscounts, discAmount } = await import('./calc.js');
+  assert.equal(discAmount(20, { v: 10, t: 'pct' }), 2);
+  assert.equal(discAmount(20, { v: 50, t: 'amt' }), 20); // ما يزيد عن المبلغ
+  assert.equal(discAmount(20, { v: '', t: 'pct' }), 0);
+  const lines = [{ id: 'a', n: 2, shelf: 10 }, { id: 'b', n: 1, shelf: 20 }];
+  const r = applyDiscounts(lines, { a: { v: 50, t: 'pct' } }, { v: 6, t: 'amt' });
+  assert.equal(r.gross, 40);
+  assert.equal(r.lineOff, 10);
+  assert.equal(r.orderOff, 6);
+  assert.equal(r.total, 24);
+  const [a, b] = r.rows;
+  assert.equal(a.final.toFixed(2), '8.00'); // 10 - 6×(10/30)
+  assert.equal(b.final.toFixed(2), '16.00'); // 20 - 6×(20/30)
+  assert.equal(a.factor.toFixed(2), '0.40');
+  assert.equal((a.discount + b.discount).toFixed(2), '16.00');
+});

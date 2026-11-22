@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Search, Trash2, Check, RotateCcw } from 'lucide-react';
+import { Search, Trash2, Check, RotateCcw, Tag, X } from 'lucide-react';
 import { useStore } from '../lib/store.jsx';
-import { salesSummary, monthlyFixed, avgUnitProfit, breakEven } from '../lib/calc.js';
+import { salesSummary, monthlyFixed, avgUnitProfit, breakEven, applyDiscounts } from '../lib/calc.js';
 import { money, num, pct, CUR, date } from '../lib/format.js';
 import { Seg, Empty, useConfirm } from '../components/ui.jsx';
 import { DailyBars } from '../components/charts.jsx';
@@ -29,16 +29,22 @@ export default function Sales() {
 /** نفس شاشة العد، وتنحفظ كمبيعات */
 export function useRecordSales() {
   const { calc, saveRows, isAdmin } = useStore();
-  return async (counts, day) => {
+  /** disc = نتيجة applyDiscounts (اختياري) */
+  return async (counts, day, disc = null) => {
+    const byId = new Map((disc?.rows || []).map((r) => [r.id, r]));
     const rows = Object.entries(counts).filter(([, n]) => n > 0).map(([pid, n]) => {
       const c = calc.product(pid);
-      return {
+      const d = byId.get(pid);
+      const f = d ? d.factor : 1;
+      const row = {
         id: crypto.randomUUID(), sale_date: day, product_id: pid,
         product_name: `${c.product.name}${c.product.size ? ' ' + c.product.size : ''}`,
-        qty: n, unit_price: +c.shelf.toFixed(2), unit_net: +c.net.toFixed(4),
+        qty: n, unit_price: +(c.shelf * f).toFixed(4), unit_net: +(c.net * f).toFixed(4),
         unit_cost: isAdmin && !c.noRecipe ? +c.total.toFixed(4) : null,
         created_at: new Date().toISOString(),
       };
+      if (d?.discount > 0) row.discount = +d.discount.toFixed(2);
+      return row;
     });
     if (!rows.length) return false;
     return saveRows('sales', rows, `انسجل ${num(rows.reduce((a, r) => a + r.qty, 0), 0)} حبة`);
@@ -62,9 +68,14 @@ function LogSales() {
     }
     return [...g];
   }, [sellable]);
+  const [lineDisc, setLineDisc] = useState({});
+  const [orderDisc, setOrderDisc] = useState({ v: '', t: 'pct' });
+  const [openDisc, setOpenDisc] = useState(null);
   const inc = (id, d) => setCounts((c) => ({ ...c, [id]: Math.max(0, (c[id] || 0) + d) }));
-  const total = Object.entries(counts).reduce((a, [id, n]) => a + (calc.product(id)?.shelf || 0) * n, 0);
   const pieces = Object.values(counts).reduce((a, n) => a + n, 0);
+  const lines = Object.entries(counts).filter(([, n]) => n > 0).map(([id, n]) => ({ id, n, shelf: calc.product(id)?.shelf || 0, p: calc.product(id)?.product }));
+  const disc = applyDiscounts(lines, lineDisc, orderDisc);
+  const reset = () => { setCounts({}); setLineDisc({}); setOrderDisc({ v: '', t: orderDisc.t }); setOpenDisc(null); };
   const dayRows = sales.filter((s) => s.sale_date === day && (isAdmin || s.created_by === email)).slice().reverse();
   const dayTotal = dayRows.reduce((a, s) => a + Number(s.unit_price) * Number(s.qty), 0);
 
@@ -100,9 +111,46 @@ function LogSales() {
       </div>
       <div className="receipt grid" style={{ gap: 16 }}>
         <div className="panel">
-          <div className="panel-head"><h2>الطلب الحالي</h2>{pieces > 0 && <button className="btn sm ghost" onClick={() => setCounts({})}><RotateCcw size={16} /> صفّر</button>}</div>
-          <div className="receipt-total final"><span><span className="num">{pieces}</span> حبة</span><b className="num">{money(total)} {CUR}</b></div>
-          <button className="btn primary" style={{ width: '100%', marginTop: 8 }} disabled={!pieces} onClick={async () => { if (await record(counts, day)) setCounts({}); }}>
+          <div className="panel-head"><h2>الطلب الحالي</h2>{pieces > 0 && <button className="btn sm ghost" onClick={reset}><RotateCcw size={16} /> صفّر</button>}</div>
+          {disc.rows.length > 0 && (
+            <div className="order-lines">
+              {disc.rows.map((r) => {
+                const d = lineDisc[r.id] || { v: '', t: 'pct' };
+                const open = openDisc === r.id || Number(d.v) > 0;
+                return (
+                  <div className="order-line" key={r.id}>
+                    <div className="order-line-top">
+                      <span>{r.p?.name} {r.p?.size && <span className="size-tag">{r.p.size}</span>} <span className="muted num">×{r.n}</span></span>
+                      <span className="order-line-end">
+                        {r.lineOff > 0 && <s className="muted num small">{money(r.gross)}</s>}
+                        <b className="num">{money(r.gross - r.lineOff)}</b>
+                        {!open && <button className="btn sm ghost disc-btn" onClick={() => setOpenDisc(r.id)} aria-label={`خصم على ${r.p?.name}`}><Tag size={14} /> خصم</button>}
+                      </span>
+                    </div>
+                    {open && (
+                      <DiscInput value={d} autoFocus={openDisc === r.id} label={`خصم ${r.p?.name}`}
+                        onChange={(v) => setLineDisc((x) => ({ ...x, [r.id]: v }))}
+                        onClear={() => { setLineDisc((x) => { const o = { ...x }; delete o[r.id]; return o; }); setOpenDisc(null); }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {pieces > 0 && (
+            <div className="order-disc">
+              <span><Tag size={15} /> خصم على الطلب كله</span>
+              <DiscInput value={orderDisc} label="خصم شامل" onChange={setOrderDisc} onClear={Number(orderDisc.v) > 0 ? () => setOrderDisc({ v: '', t: orderDisc.t }) : null} />
+            </div>
+          )}
+          {disc.discount > 0 && (
+            <>
+              <div className="receipt-total"><span>قبل الخصم</span><span className="num">{money(disc.gross)}</span></div>
+              <div className="receipt-total" style={{ color: 'var(--bad)' }}><span>الخصم{disc.gross ? <> (<span className="num">{pct(disc.discount / disc.gross)}</span>)</> : ''}</span><span className="num">−{money(disc.discount)}</span></div>
+            </>
+          )}
+          <div className="receipt-total final"><span><span className="num">{pieces}</span> حبة</span><b className="num">{money(disc.total)} {CUR}</b></div>
+          <button className="btn primary" style={{ width: '100%', marginTop: 8 }} disabled={!pieces} onClick={async () => { if (await record(counts, day, disc)) reset(); }}>
             <Check /> سجّل المبيعات {day !== today() ? `(${date(day)})` : ''}
           </button>
           <p className="muted small" style={{ marginBottom: 0 }}>اضغط على المنتج يزيد واحد. سجّل بعد كل طلب أو آخر اليوم مرة وحدة.</p>
@@ -114,7 +162,7 @@ function LogSales() {
               <tbody>
                 {dayRows.slice(0, 40).map((s) => (
                   <tr key={s.id}>
-                    <td>{s.product_name} <span className="muted num">×{num(s.qty, 0)}</span></td>
+                    <td>{s.product_name} <span className="muted num">×{num(s.qty, 0)}</span>{Number(s.discount) > 0 && <span className="chip bad" style={{ marginInlineStart: 6 }}>خصم <span className="num">{money(Number(s.discount))}</span></span>}</td>
                     <td className="n num">{money(s.unit_price * s.qty)}</td>
                     <td style={{ width: 36 }}>{(isAdmin || day === today()) && <button className="btn icon ghost" style={{ width: 32, minHeight: 32 }} aria-label="احذف" onClick={async () => { if (await confirm(`تحذف ${s.product_name} ×${s.qty}؟`)) deleteRow('sales', s.id, 'انحذف'); }}><Trash2 size={15} /></button>}</td>
                   </tr>
@@ -126,6 +174,21 @@ function LogSales() {
       </div>
       {confirmUi}
       <style>{`@media (max-width: 899px){ [data-stack]{ grid-template-columns: 1fr !important; } }`}</style>
+    </div>
+  );
+}
+
+/** خانة خصم: رقم + نوعه (نسبة أو مبلغ) */
+function DiscInput({ value, onChange, onClear, label, autoFocus }) {
+  return (
+    <div className="disc-in">
+      <input className="input num-in" type="number" inputMode="decimal" min="0" step="any" placeholder="0" autoFocus={autoFocus}
+        value={value.v} onChange={(e) => onChange({ ...value, v: e.target.value })} aria-label={label} />
+      <div className="disc-type" role="group" aria-label="نوع الخصم">
+        <button type="button" aria-pressed={value.t === 'pct'} onClick={() => onChange({ ...value, t: 'pct' })}>%</button>
+        <button type="button" aria-pressed={value.t === 'amt'} onClick={() => onChange({ ...value, t: 'amt' })}>{CUR}</button>
+      </div>
+      {onClear && <button type="button" className="btn icon ghost" style={{ width: 32, minHeight: 32 }} onClick={onClear} aria-label="شيل الخصم"><X size={15} /></button>}
     </div>
   );
 }
@@ -157,7 +220,7 @@ function Report() {
         <Seg value={range} onChange={setRange} label="الفترة" options={[['today', 'اليوم'], ['7', '7 أيام'], ['30', '30 يوم'], ['month', 'هالشهر'], ['90', '3 أشهر']]} />
       </div>
       <div className="stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        <div className="stat"><span>المبيعات</span><b className="num">{money(sum.revenue)}</b><small><span className="num">{num(sum.qty, 0)}</span> حبة</small></div>
+        <div className="stat"><span>المبيعات</span><b className="num">{money(sum.revenue)}</b><small><span className="num">{num(sum.qty, 0)}</span> حبة{sum.discount > 0 && <> · خصومات <span className="num">{money(sum.discount)}</span></>}</small></div>
         <div className="stat"><span>التكلفة</span><b className="num">{money(sum.cost)}</b><small>مواد وتغليف</small></div>
         <div className="stat"><span>إجمالي الربح</span><b className="num" style={{ color: 'var(--good)' }}>{money(sum.profit)}</b><small>هامش <span className="num">{pct(sum.net ? sum.profit / sum.net : null)}</span></small></div>
         <div className="stat"><span>بعد المصاريف الثابتة</span><b className="num" style={{ color: sum.profit - fixedShare >= 0 ? 'var(--good)' : 'var(--bad)' }}>{fixed ? money(sum.profit - fixedShare) : '—'}</b><small>{fixed ? <>مصاريف الفترة <span className="num">{money(fixedShare)}</span></> : 'أضف المصاريف'}</small></div>

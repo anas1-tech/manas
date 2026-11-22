@@ -325,6 +325,19 @@ td.num, th.num { display: table-cell; text-align: end; }
 .receipt { position: sticky; top: 20px; }
 .receipt-total { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 1px dashed var(--line); }
 .receipt-total.final { border-top: 2px solid var(--ink); font-size: 18px; }
+.order-lines { display: grid; gap: 2px; margin-bottom: 6px; max-height: 340px; overflow-y: auto; }
+.order-line { display: grid; gap: 6px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.order-line:first-child { border-top: 0; }
+.order-line-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.order-line-end { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.disc-btn { min-height: 28px; padding: 2px 8px; font-size: 13px; color: var(--ink-2); }
+.order-disc { display: grid; gap: 6px; padding: 10px 0; border-top: 1px dashed var(--line); }
+.order-disc > span { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); font-weight: 500; }
+.disc-in { display: flex; align-items: center; gap: 6px; }
+.disc-in .input { min-height: 36px; padding: 6px 10px; flex: 1; min-width: 0; }
+.disc-type { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 2px; gap: 2px; }
+.disc-type button { border: 0; background: none; border-radius: 8px; min-width: 40px; min-height: 30px; padding: 0 8px; cursor: pointer; color: var(--ink-2); font: inherit; font-size: 13px; }
+.disc-type button[aria-pressed='true'] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .range { width: 100%; accent-color: var(--brand); }
 
 /* إشعارات */

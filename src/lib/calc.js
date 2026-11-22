@@ -260,9 +260,40 @@ export function breakEven(fixed, unitProfit, s) {
   return { perMonth, perDay: perMonth / (Number(s.working_days) || 30) };
 }
 
+/** مبلغ الخصم: d = { v, t: 'pct' | 'amt' }، ما يزيد عن المبلغ نفسه */
+export function discAmount(base, d) {
+  const v = Number(d?.v) || 0;
+  if (v <= 0 || base <= 0) return 0;
+  return Math.min(base, d.t === 'amt' ? v : (base * Math.min(v, 100)) / 100);
+}
+
+/**
+ * يطبّق خصم كل منتج ثم الخصم الشامل على الطلب.
+ * lines: [{ id, n, shelf }] ← يرجع لكل سطر نسبة اللي ينحسب من سعره (factor) ومبلغ خصمه.
+ */
+export function applyDiscounts(lines, lineDisc = {}, orderDisc = null) {
+  const rows = lines.map((l) => {
+    const gross = l.shelf * l.n;
+    const off = discAmount(gross, lineDisc[l.id]);
+    return { ...l, gross, lineOff: off, after: gross - off };
+  });
+  const gross = rows.reduce((a, r) => a + r.gross, 0);
+  const sub = rows.reduce((a, r) => a + r.after, 0);
+  const orderOff = discAmount(sub, orderDisc);
+  // الخصم الشامل يتوزع على الأسطر حسب مبلغ كل سطر
+  for (const r of rows) {
+    r.orderOff = sub ? (orderOff * r.after) / sub : 0;
+    r.final = r.after - r.orderOff;
+    r.discount = r.gross - r.final;
+    r.factor = r.gross ? r.final / r.gross : 1;
+  }
+  const lineOff = rows.reduce((a, r) => a + r.lineOff, 0);
+  return { rows, gross, lineOff, orderOff, discount: lineOff + orderOff, total: gross - lineOff - orderOff };
+}
+
 /** ملخص المبيعات (يستخدم التكلفة وقت البيع لو موجودة) */
 export function salesSummary(sales, calc, from, to) {
-  let qty = 0, revenue = 0, net = 0, cost = 0;
+  let qty = 0, revenue = 0, net = 0, cost = 0, discount = 0;
   const byProduct = new Map();
   const byDay = new Map();
   for (const sa of sales) {
@@ -272,7 +303,7 @@ export function salesSummary(sales, calc, from, to) {
     const r = Number(sa.unit_price) * q;
     const n = (sa.unit_net != null ? Number(sa.unit_net) : c?.net ?? Number(sa.unit_price)) * q;
     const k = (sa.unit_cost != null ? Number(sa.unit_cost) : c?.total ?? 0) * q;
-    qty += q; revenue += r; net += n; cost += k;
+    qty += q; revenue += r; net += n; cost += k; discount += Number(sa.discount) || 0;
     const bp = byProduct.get(sa.product_id) || { id: sa.product_id, name: sa.product_name || c?.product.name || '؟', size: c?.product.size || '', qty: 0, revenue: 0, profit: 0 };
     bp.qty += q; bp.revenue += r; bp.profit += n - k;
     byProduct.set(sa.product_id, bp);
@@ -280,7 +311,7 @@ export function salesSummary(sales, calc, from, to) {
     bd.qty += q; bd.revenue += r; bd.net += n; bd.cost += k;
     byDay.set(sa.sale_date, bd);
   }
-  return { qty, revenue, net, cost, profit: net - cost, byProduct: [...byProduct.values()], byDay };
+  return { qty, revenue, net, cost, discount, profit: net - cost, byProduct: [...byProduct.values()], byDay };
 }
 
 /**

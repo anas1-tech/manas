@@ -42,7 +42,7 @@ npm run dev
 
 ## تحديثات قاعدة البيانات
 إذا كانت قاعدة البيانات قديمة، الموقع يطلع تنبيه فيه زر «انسخ الكود». الصق الكود في Supabase ← SQL Editor ← Run.
-الملفات بالترتيب: `supabase/updates/002_units.sql` وبعده `supabase/updates/003_features.sql`. ما يضر لو شغّلتها أكثر من مرة.
+الملفات بالترتيب: `supabase/updates/002_units.sql` وبعده `003_features.sql` و`004_overhead.sql` و`005_discounts.sql`. ما يضر لو شغّلتها أكثر من مرة.
 
 ## الموظفين
 1. في Supabase افتح Authentication ← Add user، وسوّ للموظف إيميل مثل `ali@example.com`.
